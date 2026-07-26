@@ -1,8 +1,7 @@
 name: Request Organizer Deploy
 
 # T06: deployment runs only after the CI workflow succeeds on main (workflow_run).
-# T18: deploy request includes SHA-tagged container image metadata for the organizer deployer.
-# T19: post-deploy smoke-test verifies /, /health, /status commit, and a task page.
+# T21: production concurrency queue; minimal permissions (no repository write).
 
 on:
   workflow_run:
@@ -24,9 +23,10 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: request-organizer-deploy
+  group: production-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -165,45 +165,14 @@ jobs:
             "https://api.github.com/repos/${DEPLOYER_REPO}/dispatches" \
             --data @payload.json
 
-          echo "Requested organizer container deployment for ${TEAM_REPO}@${TEAM_SHA}."
+          echo "Requested organizer deployment for ${TEAM_REPO}@${TEAM_SHA}."
 
-      - name: Post-deploy health check
-        continue-on-error: true
-        env:
-          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL || 'https://beginners.deploysprint-finals.knurdz.org' }}
-          EXPECTED_SHA: ${{ steps.request.outputs.sha }}
+      - name: T21 deploy concurrency summary
         run: |
-          set -euo pipefail
-          base="${PUBLIC_URL%/}"
-          echo "Waiting for ${base}/health after container deploy request..."
-          for attempt in $(seq 1 12); do
-            if curl -fsS "${base}/health" | grep -qx ok; then
-              echo "Health check passed on attempt ${attempt}."
-              if curl -fsS "${base}/status" | grep -q "${EXPECTED_SHA}"; then
-                echo "Status includes expected commit ${EXPECTED_SHA}."
-              else
-                echo "Status fetched; commit may still be rolling out (expected ${EXPECTED_SHA})."
-              fi
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "Health check did not pass within timeout; deployer may still be running (see organizer logs)."
-          exit 0
-
-      - name: Deploy workflow summary
-        env:
-          CONTAINER_IMAGE: ${{ steps.request.outputs.container_image }}
-          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
-          APP_PORT: ${{ vars.APP_PORT || '8080' }}
-          TEAM_SHA: ${{ steps.request.outputs.sha }}
-        run: |
-          set -euo pipefail
           {
-            echo "## T18 container deploy request"
+            echo "## T21 production concurrency"
             echo ""
-            echo "- Commit: \`${TEAM_SHA}\`"
-            echo "- Container: \`${CONTAINER_NAME}\` on port \`${APP_PORT}\`"
-            echo "- Image: \`${CONTAINER_IMAGE}\`"
-            echo "- Access path: organizer deployer only (no participant SSH)"
+            echo "- concurrency group: \`production-${{ github.ref }}\`"
+            echo "- cancel-in-progress: \`false\` (overlapping deploy requests queue; VPS stays consistent)"
+            echo "- permissions: \`contents: read\`, \`actions: read\` only"
           } >> "$GITHUB_STEP_SUMMARY"

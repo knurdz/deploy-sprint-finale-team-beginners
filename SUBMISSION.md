@@ -55,7 +55,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T18 |  | `/status` `container.image`, CI + deploy logs | `docs/container-deploy.md`; GHCR SHA tag + organizer deployer |
 | T19 |  |  |  |
 | T20 |  |  |  |
-| T21 |  |  |  |
+| T21 |  | Workflow YAML + Actions queue evidence | `docs/workflow-safety.md`; `production-*` deploy concurrency |
 | T22 |  |  |  |
 | T23 | [T23] Release Evidence Manifest | `release-manifest.json` artifact + `/status.releaseManifest` | commit, artifact, workflowRun, deployedAt, taskMarkers |
 | T24 |  |  |  |
@@ -71,7 +71,7 @@ Use this section for short public notes and links. Full task instructions and ch
 - T02: Domain evidence is in `/status` (`domain.connected`, assigned domain, A-record target) and `domain.config.json`. Verify HTTPS domain, plain HTTP domain/IP compatibility at `http://20.114.32.177`. No DNS portal credentials are committed.
 - T09: Conflicted file was `team-site/src/data/deadlines.ts`. Rule: keep both useful outcomes — main's `repo-setup-checkpoint` card and organizer `merge-conflict-lab` card from `task-assets/conflict-merge`. Verify with a source search for both ids and zero `<<<<<<<` / `=======` / `>>>>>>>` markers, then `npm run build` in `team-site/`.
 - T06: CI workflow (`.github/workflows/ci.yml`) runs on `pull_request` and `push` to `main`. It uses Node 20, `npm ci` from `team-site/package-lock.json`, `npm run build` in `team-site/`, and uploads `team-site/dist` as `site-dist-<sha>`. `Request Organizer Deploy` only continues when that CI workflow succeeds on `main`.
-- T18: CI also builds/pushes `ghcr.io/.../team-site:<sha>`, writes `container-deploy-<sha>` manifest artifact, and deploy requests include `deploy_mode: container` for the organizer deployer. See `docs/container-deploy.md`.
+- T21: Every workflow under `.github/workflows/` declares explicit `permissions` and `concurrency`. Production deploy and rollback share `production-${{ github.ref }}` with `cancel-in-progress: false`. PR CI and PR Preview do not read deploy secrets. See `docs/workflow-safety.md`.
 
 List anything judges should know without exposing credentials or private infrastructure details.
 
@@ -89,6 +89,14 @@ List anything judges should know without exposing credentials or private infrast
 - Install stays `npm ci` in `team-site/` (never skipped on cache hit).
 - CI step summary records cache-hit output and `npm audit` exit code (document-only).
 - Cache invalidates when `team-site/package-lock.json` changes; `npm ci` still enforces lockfile integrity.
+
+### T21 least privilege and concurrency
+
+- Explicit `permissions` on CI, deploy, rollback, PR Preview, and Pages workflows (no default broad write).
+- Deploy concurrency: `group: production-${{ github.ref }}`, `cancel-in-progress: false` — overlapping deploys queue.
+- CI concurrency: `ci-${{ github.workflow }}-${{ github.ref }}`, `cancel-in-progress: true`.
+- PR workflows: no `PRIVATE_DEPLOY_TOKEN` / deployer secret references on `pull_request` events.
+- Verify: push two quick commits to `main` or double `workflow_dispatch` deploy; confirm one deploy run queues in Actions.
 
 ### T15 runtime feature flag
 
