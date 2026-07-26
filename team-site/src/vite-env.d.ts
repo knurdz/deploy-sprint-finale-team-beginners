@@ -3,6 +3,8 @@
 interface ImportMetaEnv {
   readonly VITE_PUBLIC_DEPLOY_LABEL?: string;
   readonly VITE_PUBLIC_URL?: string;
+  /** Build-time mirror of FEATURE_SHOW_INSIGHTS (secret/var). Never commit real values. */
+  readonly VITE_FEATURE_SHOW_INSIGHTS?: string;
 }
 
 interface ImportMeta {

@@ -25,5 +25,12 @@
     "publicDeployLabel": "unset-public-label",
     "privateDeployTokenConfigured": false,
     "secretsRedacted": true
-  }
+  },
+  "contact": {
+    "provider": "web3forms",
+    "configured": false,
+    "accessKeyStoredInSecret": true
+  },
+  "contact.provider": "web3forms",
+  "contact.configured": false
 }
