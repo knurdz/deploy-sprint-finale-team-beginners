@@ -48,22 +48,22 @@ Use this section for short public notes and links. Full task instructions and ch
 | T11 |  |  |  |
 | T12 | [T12] Fast Dependency Pipeline | CI summary: cache-hit + npm ci + audit | `setup-node` cache keyed on `team-site/package-lock.json`; `npm ci` always runs |
 | T13 |  |  |  |
-| T14 | (see T18) | `team-site/Dockerfile` multi-stage build | Production image shape included with T18 container deploy |
+| T14 | [T14] Production Docker Image | `team-site/Dockerfile` multi-stage; CI `docker-image-evidence-<sha>` | tag + image id; nginx serves `dist`; lockfile `npm ci` |
 | T15 | [T15] Runtime Feature Flag | `/status` `featureFlags` + Insights UI | `FEATURE_SHOW_INSIGHTS` secret/var → `VITE_FEATURE_SHOW_INSIGHTS`; no hardcoded flag |
 | T16 | [T16] Resend Email Alerts | `/status` email + `/email/status.json` | Secret name only: `RESEND_API_KEY`; CI dry-run evidence |
 | T17 |  |  |  |
 | T18 |  | `/status` `container.image`, CI + deploy logs | `docs/container-deploy.md`; GHCR SHA tag + organizer deployer |
 | T19 |  |  |  |
 | T20 |  |  |  |
-| T21 |  |  |  |
+| T21 |  | Workflow YAML + Actions queue evidence | `docs/workflow-safety.md`; `production-*` deploy concurrency |
 | T22 |  |  |  |
 | T23 | [T23] Release Evidence Manifest | `release-manifest.json` artifact + `/status.releaseManifest` | commit, artifact, workflowRun, deployedAt, taskMarkers |
 | T24 | [T24] Cloudflare Turnstile | `/contact` widget + `/status` turnstile + `/turnstile/status.json` | Secret name only: `TURNSTILE_SECRET_KEY`; site key public |
 | T25 |  |  |  |
-| T26 |  |  |  |
+| T26 | [T26] Incident: Broken Deploy Recovery | `deploy-broken.yml` + `docs/incidents/broken-deploy-log.md` | Seeded `build` path → fix `team-site/dist`; rollback first if prod unhealthy |
 | T27 |  |  |  |
 | T28 |  |  |  |
-| T29 |  |  |  |
+| T29 | [T29] Disaster Recovery From Actions Only | `.github/workflows/recover.yml` + `docs/recovery.md` | Actions-only restore; `dry_run` manifest; no manual VPS |
 | T30 |  |  |  |
 
 ## Public Notes
@@ -71,7 +71,7 @@ Use this section for short public notes and links. Full task instructions and ch
 - T02: Domain evidence is in `/status` (`domain.connected`, assigned domain, A-record target) and `domain.config.json`. Verify HTTPS domain, plain HTTP domain/IP compatibility at `http://20.114.32.177`. No DNS portal credentials are committed.
 - T09: Conflicted file was `team-site/src/data/deadlines.ts`. Rule: keep both useful outcomes — main's `repo-setup-checkpoint` card and organizer `merge-conflict-lab` card from `task-assets/conflict-merge`. Verify with a source search for both ids and zero `<<<<<<<` / `=======` / `>>>>>>>` markers, then `npm run build` in `team-site/`.
 - T06: CI workflow (`.github/workflows/ci.yml`) runs on `pull_request` and `push` to `main`. It uses Node 20, `npm ci` from `team-site/package-lock.json`, `npm run build` in `team-site/`, and uploads `team-site/dist` as `site-dist-<sha>`. `Request Organizer Deploy` only continues when that CI workflow succeeds on `main`.
-- T18: CI also builds/pushes `ghcr.io/.../team-site:<sha>`, writes `container-deploy-<sha>` manifest artifact, and deploy requests include `deploy_mode: container` for the organizer deployer. See `docs/container-deploy.md`.
+- T21: Every workflow under `.github/workflows/` declares explicit `permissions` and `concurrency`. Production deploy and rollback share `production-${{ github.ref }}` with `cancel-in-progress: false`. PR CI and PR Preview do not read deploy secrets. See `docs/workflow-safety.md`.
 
 List anything judges should know without exposing credentials or private infrastructure details.
 
@@ -90,6 +90,14 @@ List anything judges should know without exposing credentials or private infrast
 - CI step summary records cache-hit output and `npm audit` exit code (document-only).
 - Cache invalidates when `team-site/package-lock.json` changes; `npm ci` still enforces lockfile integrity.
 
+### T21 least privilege and concurrency
+
+- Explicit `permissions` on CI, deploy, rollback, PR Preview, and Pages workflows (no default broad write).
+- Deploy concurrency: `group: production-${{ github.ref }}`, `cancel-in-progress: false` — overlapping deploys queue.
+- CI concurrency: `ci-${{ github.workflow }}-${{ github.ref }}`, `cancel-in-progress: true`.
+- PR workflows: no `PRIVATE_DEPLOY_TOKEN` / deployer secret references on `pull_request` events.
+- Verify: push two quick commits to `main` or double `workflow_dispatch` deploy; confirm one deploy run queues in Actions.
+
 ### T15 runtime feature flag
 
 - Snippet adapted in `team-site/src/config/featureFlags.ts` (reads `VITE_FEATURE_SHOW_INSIGHTS`).
@@ -99,6 +107,13 @@ List anything judges should know without exposing credentials or private infrast
 - Verify off: set secret/var to `false`, rebuild; panel hidden; status `showInsights: false`.
 - Verify on: set to `true`, rebuild; panel visible; status `showInsights: true`.
 - Incident disable: set `FEATURE_SHOW_INSIGHTS=false` and redeploy (no source change).
+
+### T14 production Docker image
+
+- Starter adapted to `team-site/Dockerfile`: `node:20-alpine` build (`npm ci` from `package-lock.json`) + `nginx:alpine` runtime serving `dist`.
+- Nginx config: `team-site/nginx.conf` (serves `/health`, `/status`, SPA fallback).
+- CI builds `ghcr.io/.../team-site:<sha>` and `deploy-sprint/team-site:<sha>`, smoke-tests `/health`, uploads `docker-image-evidence-<sha>` with tag + image id.
+- Verify: CI **Build production Docker image (T14)** green; download evidence artifact; optional local `docker build -t deploy-sprint/team-site:local team-site`.
 
 
 ### T23 release evidence manifest
@@ -125,4 +140,14 @@ List anything judges should know without exposing credentials or private infrast
 - Widget rendered on `/contact.html` (`TurnstileWidget`); submit requires `cf-turnstile-response` token.
 - CI dry-run verifies secret presence and writes `/turnstile/status.json` + `/status.turnstile` with `provider=cloudflare-turnstile`, `secretRedacted=true`, `allowedHostname`.
 - Verify: CI assert step + artifact; `grep -R VITE_TURNSTILE_SECRET` must be empty.
+
+### T29 disaster recovery from Actions only
+
+- Workflow: `.github/workflows/recover.yml` (`workflow_dispatch` inputs `restore_target`, `dry_run` default `true`).
+- Runbook: `docs/recovery.md`.
+- Recreates (in order): app directories → env placeholders → container/service config → release pointer (artifact + GHCR image) → service recreate → verify.
+- No-live: dry-run uploads `recovery-manifest-<run_id>` + `recovery-runtime/` (`manual_vps_repair: false`).
+- Live: `dry_run=false` requests organizer container redeploy for the confirmed SHA (Actions secrets only; no SSH).
+- Starter bug: empty `restoreTarget` camelCase input; fixed to `restore_target`. Cite log: `Log line proving restore target: restore_target=<sha>`.
+- Judge answer: recreate directories, then env placeholders, then container config, then bind latest confirmed artifact/image, then start/redeploy service via Actions, then verify `/health` + `/status`.
 

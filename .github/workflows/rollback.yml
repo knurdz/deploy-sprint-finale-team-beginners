@@ -1,5 +1,7 @@
 ﻿name: Rollback To Known-Good Release
 
+# T21: rollback redeploys share the production concurrency group with main deploy.
+
 on:
   workflow_dispatch:
     inputs:
@@ -18,7 +20,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: rollback-known-good
+  group: production-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
