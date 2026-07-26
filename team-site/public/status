@@ -1,10 +1,16 @@
 {
   "team": "BEGINNERS",
-  "task": "T05",
-  "marker": "T05",
+  "team_slug": "beginners",
+  "commit": "13ad9ed528208409e035f5397b8926a6c0453715",
+  "commit_short": "13ad9ed",
+  "release_id": "30190061685",
+  "deploy_time": "2026-07-26T05:53:22.538Z",
+  "public_url": "http://20.114.32.177",
+  "task": "T01",
+  "marker": "T01",
   "config": {
-    "publicDeployLabel": "BEGINNERS-DEPLOY-LABEL",
-    "privateDeployTokenConfigured": true,
+    "publicDeployLabel": "unset-public-label",
+    "privateDeployTokenConfigured": false,
     "secretsRedacted": true
   }
 }
