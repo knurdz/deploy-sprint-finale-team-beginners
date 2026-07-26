@@ -24,6 +24,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: T27 secret scan
+        run: node scripts/secret-scan.mjs
+
       - name: Setup Node 20
         id: setup_node
         uses: actions/setup-node@v4
@@ -95,6 +98,31 @@ jobs:
           fi
           echo "WEB3FORMS_ACCESS_KEY is configured for Web3Forms (value redacted)."
 
+      - name: Prepare Sentry monitoring (T30)
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_RELEASE: ${{ github.sha }}
+        run: node scripts/prepare-sentry.mjs
+        working-directory: team-site
+
+      - name: Verify Sentry GitHub Secrets (T30)
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          set -euo pipefail
+          for name in SENTRY_DSN SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT; do
+            if [ -z "${!name:-}" ]; then
+              echo "${name} is not configured."
+              exit 1
+            fi
+          done
+          echo "Sentry secrets configured (SENTRY_AUTH_TOKEN value not printed)."
+
       - name: Build team-site
         env:
           TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
@@ -110,7 +138,7 @@ jobs:
           DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
           DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
           DOMAIN_CONNECTED: "true"
-          TASK_MARKER: T22
+          TASK_MARKER: T30
           COMPOSE_RUNTIME: "true"
           COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01' }}
           SERVICE_NAME: ${{ vars.SERVICE_NAME || 'deploy-sprint-team-01' }}
@@ -128,6 +156,12 @@ jobs:
           VITE_RELEASE_ID: ${{ github.run_id }}
           WEB3FORMS_CONFIGURED: "true"
           WEB3FORMS_ACCESS_KEY_CONFIGURED: "true"
+          SENTRY_DSN_CONFIGURED: "true"
+          SENTRY_CONFIGURED: "true"
+          SENTRY_RELEASE: ${{ github.sha }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_RELEASE_AUTOMATION: "true"
         run: npm run build
         working-directory: team-site
 
@@ -137,6 +171,28 @@ jobs:
           name: site-dist-${{ github.sha }}
           path: team-site/dist
           if-no-files-found: error
+
+      - name: Create Sentry release (T30)
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          set -euo pipefail
+          curl -sSL https://sentry.io/get-cli/ | bash
+          export SENTRY_AUTH_TOKEN
+          sentry-cli releases new "${GITHUB_SHA}" --org "${SENTRY_ORG}" --project "${SENTRY_PROJECT}"
+          sentry-cli releases set-commits "${GITHUB_SHA}" --auto --ignore-empty --org "${SENTRY_ORG}" --project "${SENTRY_PROJECT}" || true
+          if ls team-site/dist/assets/*.map >/dev/null 2>&1; then
+            sentry-cli sourcemaps upload team-site/dist/assets \
+              --org "${SENTRY_ORG}" \
+              --project "${SENTRY_PROJECT}" \
+              --release "${GITHUB_SHA}" \
+              --url-prefix "~/" \
+              --validate
+          fi
+          sentry-cli releases finalize "${GITHUB_SHA}" --org "${SENTRY_ORG}" --project "${SENTRY_PROJECT}"
+          echo "Sentry release ${GITHUB_SHA} created (auth token not logged)."
 
       - name: Validate Compose config (T22 dry-run)
         run: node scripts/validate-compose-config.mjs
@@ -164,6 +220,7 @@ jobs:
           {
             echo "## T06 CI gate"
             echo ""
+            echo "- T27: \`scripts/secret-scan.mjs\` passed"
             echo "- Node: 20"
             echo "- Install: \`npm ci\` (team-site lockfile)"
             echo "- Build: \`npm run build\` in \`team-site/\`"
@@ -171,6 +228,7 @@ jobs:
             echo "- Feature flag: FEATURE_SHOW_INSIGHTS (value redacted; boolean only in /status)"
             echo "- T21: PR runs skip deploy secrets; permissions contents:read + actions:write (artifacts)"
             echo "- T22: \`docker compose config\` validated; artifact \`compose-deploy-${GITHUB_SHA}\`"
+            echo "- T30: Sentry SDK + release \`${GITHUB_SHA}\` (secrets redacted)"
             echo "- Deploy is gated on this workflow succeeding on \`main\`"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "CI gate passed for commit ${GITHUB_SHA}."

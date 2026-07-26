@@ -142,6 +142,24 @@ if (taskMarker === 'T22' || process.env.COMPOSE_RUNTIME === 'true') {
   };
 }
 
+const sentryConfigured =
+  process.env.SENTRY_DSN_CONFIGURED === 'true' || process.env.SENTRY_CONFIGURED === 'true';
+const sentryReleaseName = process.env.SENTRY_RELEASE || commit;
+
+if (sentryConfigured || taskMarker === 'T30') {
+  status.monitoring = {
+    provider: 'sentry',
+    configured: sentryConfigured,
+    release: sentryReleaseName,
+    org: process.env.SENTRY_ORG || '',
+    project: process.env.SENTRY_PROJECT || '',
+    releaseAutomation: process.env.SENTRY_RELEASE_AUTOMATION === 'true',
+    authTokenStoredInSecret: true,
+    testErrorPath: './sentry-test.html',
+  };
+  status['monitoring.provider'] = 'sentry';
+}
+
 const domainConfig = {
   assignedDomain,
   DOMAIN_PUBLIC_URL: domainPublicUrl,
