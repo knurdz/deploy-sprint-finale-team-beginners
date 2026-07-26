@@ -7,6 +7,7 @@ import {
   CloudSun,
   GitBranch,
   GraduationCap,
+  Mail,
   Search,
   ShieldCheck,
   Users,
@@ -88,6 +89,10 @@ export function App() {
           <a href="#teams">
             <Users size={18} />
             Teams
+          </a>
+          <a href="./contact.html">
+            <Mail size={18} />
+            Contact
           </a>
         </nav>
 
