@@ -1,6 +1,6 @@
 name: CI
 
-# T21: explicit least-privilege permissions; PR runs do not read deploy secrets.
+
 
 on:
   pull_request:
@@ -11,11 +11,11 @@ on:
 permissions:
   contents: read
   actions: write
+  packages: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-  packages: write
 
 jobs:
   build:
@@ -96,6 +96,31 @@ jobs:
           fi
           echo "WEB3FORMS_ACCESS_KEY is configured for Web3Forms (value redacted)."
 
+      - name: Verify RESEND_API_KEY secret
+        id: resend_secret
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RESEND_API_KEY:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "RESEND_API_KEY is not configured."
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+          echo "RESEND_API_KEY is configured for Resend (value redacted)."
+
+      - name: Prepare Resend email alert evidence
+        id: resend_email
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || secrets.RESEND_FROM_EMAIL }}
+          ALERT_RECIPIENT_EMAIL: ${{ vars.ALERT_RECIPIENT_EMAIL || secrets.ALERT_RECIPIENT_EMAIL }}
+          EMAIL_PROVIDER: ${{ vars.EMAIL_PROVIDER || 'resend' }}
+          EMAIL_ALERT_MODE: ${{ vars.EMAIL_ALERT_MODE || 'dry-run' }}
+        run: node scripts/prepare-resend-email.mjs
+        working-directory: team-site
+
       - name: Resolve container image tags
         id: container
         run: |
@@ -123,9 +148,12 @@ jobs:
           DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
           DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
           DOMAIN_CONNECTED: "true"
-
           TASK_MARKER: T23
           BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T15,T16,T18,T21,T23,T26
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          CONTAINER_IMAGE: ${{ steps.container.outputs.image }}
           COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T14,T15,T23
 
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
@@ -156,6 +184,7 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           DEPLOY_TIME: ${{ github.run_started_at }}
           BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T15,T16,T18,T21,T23,T26
           COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T14,T15,T23
         run: node team-site/scripts/write-release-manifest.mjs
 
@@ -172,7 +201,6 @@ jobs:
           path: team-site/dist
           if-no-files-found: error
 
-
       - name: Upload release manifest artifact
         uses: actions/upload-artifact@v4
         with:
@@ -180,6 +208,37 @@ jobs:
           path: release-manifest.json
           if-no-files-found: error
 
+      - name: Publish Resend email status evidence
+        run: |
+          set -euo pipefail
+          {
+            echo "## T16 Resend Email Alerts"
+            echo ""
+            echo "- Secret name: \`RESEND_API_KEY\` (value never logged)"
+            echo "- Provider: resend"
+            echo "- Configured: ${{ steps.resend_secret.outputs.configured }}"
+            echo "- secretRedacted: true"
+            echo "- Mode: \`${{ vars.EMAIL_ALERT_MODE || 'dry-run' }}\` (CI/deploy-time only; not browser)"
+            echo "- Evidence: \`/status\` email block + \`/email/status.json\` in site-dist artifact"
+          } >> "$GITHUB_STEP_SUMMARY"
+          test -f team-site/dist/email/status.json
+          test -f team-site/dist/status
+          python3 - <<'PY'
+          import json
+          status = json.load(open("team-site/dist/status", encoding="utf-8"))
+          email = status.get("email") or {}
+          assert email.get("provider") == "resend", email
+          assert email.get("configured") is True, email
+          assert email.get("secretRedacted") is True, email
+          assert "re_" not in json.dumps(status).lower()
+          artifact = json.load(open("team-site/dist/email/status.json", encoding="utf-8"))
+          assert artifact.get("provider") == "resend"
+          assert artifact.get("configured") is True
+          assert artifact.get("secretRedacted") is True
+          print("T16 email status evidence OK (redacted).")
+          PY
+
+      - name: Build container image
       - name: Build production Docker image (T14)
         id: docker_build
         env:
@@ -295,6 +354,7 @@ jobs:
             echo "- Build: \`npm run build\` in \`team-site/\`"
             echo "- Artifact: \`site-dist-${GITHUB_SHA}\` from \`team-site/dist\`"
             echo "- Feature flag: FEATURE_SHOW_INSIGHTS (value redacted; boolean only in /status)"
+            echo "- T21: PR runs skip deploy secrets; permissions contents:read + actions:write + packages:write"
             echo "- Dockerfile: \`team-site/Dockerfile\` (build + nginx runtime)"
             echo "- Image tag: \`${{ steps.container.outputs.image }}\`"
             echo "- Image id: \`${{ steps.docker_build.outputs.image_id }}\`"
