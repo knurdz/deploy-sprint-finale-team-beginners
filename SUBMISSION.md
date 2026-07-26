@@ -54,8 +54,8 @@ Use this section for short public notes and links. Full task instructions and ch
 | T18 |  |  |  |
 | T19 |  |  |  |
 | T20 |  |  |  |
-| T21 |  |  |  |
-| T22 |  |  |  |
+| T21 |  | Workflow YAML + Actions queue evidence | `docs/workflow-safety.md`; `production-*` deploy concurrency |
+| T22 |  | `compose.yml`, `compose-deploy-<sha>`, `/status` `runtime=compose` | `docs/compose-runtime.md`; remote `.env` at deploy only |
 | T23 |  |  |  |
 | T24 |  |  |  |
 | T25 |  |  |  |
@@ -70,6 +70,8 @@ Use this section for short public notes and links. Full task instructions and ch
 - T02: Domain evidence is in `/status` (`domain.connected`, assigned domain, A-record target) and `domain.config.json`. Verify HTTPS domain, plain HTTP domain/IP compatibility at `http://20.114.32.177`. No DNS portal credentials are committed.
 - T09: Conflicted file was `team-site/src/data/deadlines.ts`. Rule: keep both useful outcomes — main's `repo-setup-checkpoint` card and organizer `merge-conflict-lab` card from `task-assets/conflict-merge`. Verify with a source search for both ids and zero `<<<<<<<` / `=======` / `>>>>>>>` markers, then `npm run build` in `team-site/`.
 - T06: CI workflow (`.github/workflows/ci.yml`) runs on `pull_request` and `push` to `main`. It uses Node 20, `npm ci` from `team-site/package-lock.json`, `npm run build` in `team-site/`, and uploads `team-site/dist` as `site-dist-<sha>`. `Request Organizer Deploy` only continues when that CI workflow succeeds on `main`.
+- T21: Every workflow under `.github/workflows/` declares explicit `permissions` and `concurrency`. Production deploy and rollback share `production-${{ github.ref }}` with `cancel-in-progress: false`. PR CI and PR Preview do not read deploy secrets. See `docs/workflow-safety.md`.
+- T22: `compose.yml` + `.env.example` (names only); CI validates `docker compose config`; deploy request uses `deploy_mode: compose` and generates remote env at `RUNTIME_ENV_PATH`. See `docs/compose-runtime.md`.
 
 List anything judges should know without exposing credentials or private infrastructure details.
 
@@ -87,6 +89,21 @@ List anything judges should know without exposing credentials or private infrast
 - Install stays `npm ci` in `team-site/` (never skipped on cache hit).
 - CI step summary records cache-hit output and `npm audit` exit code (document-only).
 - Cache invalidates when `team-site/package-lock.json` changes; `npm ci` still enforces lockfile integrity.
+
+### T21 least privilege and concurrency
+
+- Explicit `permissions` on CI, deploy, rollback, PR Preview, and Pages workflows (no default broad write).
+- Deploy concurrency: `group: production-${{ github.ref }}`, `cancel-in-progress: false` — overlapping deploys queue.
+- CI concurrency: `ci-${{ github.workflow }}-${{ github.ref }}`, `cancel-in-progress: true`.
+- PR workflows: no `PRIVATE_DEPLOY_TOKEN` / deployer secret references on `pull_request` events.
+- Verify: push two quick commits to `main` or double `workflow_dispatch` deploy; confirm one deploy run queues in Actions.
+
+### T22 compose runtime service
+
+- `compose.yml`: service `deploy-sprint-team-01`, `restart: unless-stopped`, healthcheck on `/health`, `env_file` for runtime `.env`.
+- `.env.example`: placeholder names only; real file at `/opt/deploy-sprint/team-01/.env` created by deployer (not committed).
+- CI: `scripts/validate-compose-config.mjs` + artifact `compose-deploy-<sha>`.
+- `/status`: `runtime: compose` and `compose` block when built with `COMPOSE_RUNTIME=true`.
 
 ### T15 runtime feature flag
 

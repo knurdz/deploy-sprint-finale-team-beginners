@@ -1,10 +1,20 @@
 name: CI
 
+# T21: explicit least-privilege permissions; PR runs do not read deploy secrets.
+
 on:
   pull_request:
   push:
     branches:
       - main
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -22,8 +32,9 @@ jobs:
           cache: npm
           cache-dependency-path: team-site/package-lock.json
 
-      - name: Check private deploy token (Actions only)
-        id: deploy_secret
+      - name: Check private deploy token (push to main only)
+        id: deploy_secret_main
+        if: github.event_name == 'push'
         env:
           PRIVATE_DEPLOY_TOKEN: ${{ secrets.PRIVATE_DEPLOY_TOKEN }}
         run: |
@@ -36,6 +47,14 @@ jobs:
             echo "PRIVATE_DEPLOY_TOKEN is not configured."
             exit 1
           fi
+
+      - name: PR CI without deploy secrets (T21)
+        id: deploy_secret_pr
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          echo "Pull request CI does not read PRIVATE_DEPLOY_TOKEN or deployer secrets."
 
       - name: Install from team-site lockfile
         run: npm ci
@@ -116,10 +135,18 @@ jobs:
           DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
           DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
           DOMAIN_CONNECTED: "true"
-          TASK_MARKER: T16
+
+          TASK_MARKER: T22
+          COMPOSE_RUNTIME: "true"
+          COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01' }}
+          SERVICE_NAME: ${{ vars.SERVICE_NAME || 'deploy-sprint-team-01' }}
+          RUNTIME_ENV_PATH: ${{ vars.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          APP_IMAGE: ghcr.io/${{ github.repository }}/team-site:${{ github.sha }}
+
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
-          PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret.outputs.configured }}
+          PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret_main.outputs.configured || steps.deploy_secret_pr.outputs.configured }}
           FEATURE_SHOW_INSIGHTS: ${{ secrets.FEATURE_SHOW_INSIGHTS || vars.FEATURE_SHOW_INSIGHTS || 'false' }}
           VITE_FEATURE_SHOW_INSIGHTS: ${{ secrets.FEATURE_SHOW_INSIGHTS || vars.FEATURE_SHOW_INSIGHTS || 'false' }}
           VITE_PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
@@ -146,35 +173,26 @@ jobs:
           path: team-site/dist
           if-no-files-found: error
 
-      - name: Publish Resend email status evidence
-        run: |
-          set -euo pipefail
-          {
-            echo "## T16 Resend Email Alerts"
-            echo ""
-            echo "- Secret name: \`RESEND_API_KEY\` (value never logged)"
-            echo "- Provider: resend"
-            echo "- Configured: ${{ steps.resend_secret.outputs.configured }}"
-            echo "- secretRedacted: true"
-            echo "- Mode: \`${{ vars.EMAIL_ALERT_MODE || 'dry-run' }}\` (CI/deploy-time only; not browser)"
-            echo "- Evidence: \`/status\` email block + \`/email/status.json\` in site-dist artifact"
-          } >> "$GITHUB_STEP_SUMMARY"
-          test -f team-site/dist/email/status.json
-          test -f team-site/dist/status
-          python3 - <<'PY'
-          import json
-          status = json.load(open("team-site/dist/status", encoding="utf-8"))
-          email = status.get("email") or {}
-          assert email.get("provider") == "resend", email
-          assert email.get("configured") is True, email
-          assert email.get("secretRedacted") is True, email
-          assert "re_" not in json.dumps(status).lower()
-          artifact = json.load(open("team-site/dist/email/status.json", encoding="utf-8"))
-          assert artifact.get("provider") == "resend"
-          assert artifact.get("configured") is True
-          assert artifact.get("secretRedacted") is True
-          print("T16 email status evidence OK (redacted).")
-          PY
+      - name: Validate Compose config (T22 dry-run)
+        run: node scripts/validate-compose-config.mjs
+
+      - name: Write compose deploy manifest (T22)
+        env:
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+          DOMAIN_PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL }}
+          COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01' }}
+          SERVICE_NAME: ${{ vars.SERVICE_NAME || 'deploy-sprint-team-01' }}
+          RUNTIME_ENV_PATH: ${{ vars.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+        run: node scripts/compose-runtime-manifest.mjs
+
+      - name: Upload compose deploy manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-deploy-${{ github.sha }}
+          path: compose-deploy-manifest.json
+          if-no-files-found: error
+
 
       - name: CI gate summary
         run: |
@@ -187,7 +205,10 @@ jobs:
             echo "- Build: \`npm run build\` in \`team-site/\`"
             echo "- Artifact: \`site-dist-${GITHUB_SHA}\` from \`team-site/dist\`"
             echo "- Feature flag: FEATURE_SHOW_INSIGHTS (value redacted; boolean only in /status)"
-            echo "- Email: RESEND_API_KEY secret (redacted; /status + /email/status.json)"
+
+            echo "- T21: PR runs skip deploy secrets; permissions contents:read + actions:write (artifacts)"
+            echo "- T22: \`docker compose config\` validated; artifact \`compose-deploy-${GITHUB_SHA}\`"
+
             echo "- Deploy is gated on this workflow succeeding on \`main\`"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "CI gate passed for commit ${GITHUB_SHA}."

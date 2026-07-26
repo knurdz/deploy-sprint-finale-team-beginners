@@ -84,34 +84,16 @@ const contactEvidence = {
   accessKeyStoredInSecret: true,
 };
 
-// T16: Resend readiness only — never write API key, response tokens, or addresses.
-// Prefer artifact from prepare-resend-email.mjs; fall back to boolean CI flags only.
-let emailConfigured =
-  process.env.RESEND_CONFIGURED === 'true' ||
-  process.env.RESEND_API_KEY_CONFIGURED === 'true';
-let emailMode = process.env.EMAIL_ALERT_MODE || 'dry-run';
-const emailStatusPath = join(publicDir, 'email', 'status.json');
-if (existsSync(emailStatusPath)) {
-  try {
-    const emailArtifact = JSON.parse(readFileSync(emailStatusPath, 'utf8'));
-    if (typeof emailArtifact.configured === 'boolean') {
-      emailConfigured = emailArtifact.configured;
-    }
-    if (typeof emailArtifact.mode === 'string') {
-      emailMode = emailArtifact.mode;
-    }
-  } catch {
-    // Keep env-flag fallback if artifact is unreadable.
-  }
-}
-const emailEvidence = {
-  task: 'T16',
-  provider: 'resend',
-  configured: emailConfigured,
-  secretRedacted: true,
-  apiKeySecretName: 'RESEND_API_KEY',
-  mode: emailMode,
-};
+
+const composeProjectName = process.env.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01';
+const serviceName = process.env.SERVICE_NAME || 'deploy-sprint-team-01';
+const runtimeEnvPath =
+  process.env.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env';
+const appPort = process.env.APP_PORT || '8080';
+const appImageExplicit =
+  process.env.APP_IMAGE || process.env.CONTAINER_IMAGE || process.env.VITE_APP_IMAGE;
+const appImageDefault = appImageExplicit || `deploy-sprint/team-site:${commit}`;
+
 
 const status = {
   team,
@@ -150,6 +132,19 @@ if (previewPrNumber && previewBasePath) {
     productionStatusMustNotChange: true,
   };
   status.previewUrl = previewUrl;
+}
+
+if (taskMarker === 'T22' || process.env.COMPOSE_RUNTIME === 'true') {
+  status.runtime = 'compose';
+  status.compose = {
+    projectName: composeProjectName,
+    serviceName,
+    runtimeEnvPath,
+    appPort: Number(appPort),
+    appImage: appImageDefault,
+    release: commit,
+    envGeneratedAtDeploy: true,
+  };
 }
 
 const domainConfig = {

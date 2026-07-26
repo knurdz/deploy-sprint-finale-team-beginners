@@ -1,6 +1,8 @@
 name: Request Organizer Deploy
 
 # T06: deployment runs only after the CI workflow succeeds on main (workflow_run).
+# T21: production concurrency queue; minimal permissions (no repository write).
+# T22: compose runtime — deployer generates remote .env and runs docker compose.
 
 on:
   workflow_run:
@@ -13,9 +15,10 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
-  group: request-organizer-deploy
+  group: production-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -28,9 +31,12 @@ jobs:
         !contains(github.event.workflow_run.head_commit.message, '[skip deploy]')
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Confirm CI gate passed
         if: github.event_name == 'workflow_run'
         run: |
@@ -65,10 +71,14 @@ jobs:
             exit 1
           fi
 
+          repo="${GITHUB_REPOSITORY,,}"
+          image="ghcr.io/${repo}/team-site:${sha}"
+
           {
             echo "sha=$sha"
             echo "branch=$branch"
             echo "source_run_id=$source_run_id"
+            echo "app_image=$image"
           } >> "$GITHUB_OUTPUT"
 
       - name: Authorize deploy with private token (server-side only)
@@ -82,7 +92,25 @@ jobs:
           fi
           echo "Deploy authorized using masked PRIVATE_DEPLOY_TOKEN."
 
-      - name: Request deploy from organizer deployer
+      - name: Build compose deploy manifest
+        env:
+          TEAM_SHA: ${{ steps.request.outputs.sha }}
+          APP_IMAGE: ${{ steps.request.outputs.app_image }}
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+          COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01' }}
+          SERVICE_NAME: ${{ vars.SERVICE_NAME || 'deploy-sprint-team-01' }}
+          RUNTIME_ENV_PATH: ${{ vars.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+        run: node scripts/compose-runtime-manifest.mjs
+
+      - name: Upload compose deploy manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-deploy-request-${{ steps.request.outputs.sha }}
+          path: compose-deploy-manifest.json
+          if-no-files-found: error
+
+      - name: Request compose deploy from organizer deployer
         env:
           DEPLOYER_DISPATCH_TOKEN: ${{ secrets.DEPLOYER_DISPATCH_TOKEN }}
           DEPLOYER_REPO: knurdz/deploy-sprint-deployer
@@ -90,6 +118,12 @@ jobs:
           TEAM_SHA: ${{ steps.request.outputs.sha }}
           TEAM_BRANCH: ${{ steps.request.outputs.branch }}
           SOURCE_RUN_ID: ${{ steps.request.outputs.source_run_id }}
+          APP_IMAGE: ${{ steps.request.outputs.app_image }}
+          COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01' }}
+          SERVICE_NAME: ${{ vars.SERVICE_NAME || 'deploy-sprint-team-01' }}
+          RUNTIME_ENV_PATH: ${{ vars.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
         run: |
           set -euo pipefail
 
@@ -110,11 +144,38 @@ jobs:
                   "sha": os.environ["TEAM_SHA"],
                   "branch": os.environ["TEAM_BRANCH"],
                   "source_run_id": os.environ["SOURCE_RUN_ID"],
+                  "deploy_mode": "compose",
+                  "runtime": "compose",
+                  "compose_file": "compose.yml",
+                  "compose_project_name": os.environ.get("COMPOSE_PROJECT_NAME", "deploy-sprint-team-01"),
+                  "service_name": os.environ.get("SERVICE_NAME", "deploy-sprint-team-01"),
+                  "runtime_env_path": os.environ.get("RUNTIME_ENV_PATH", "/opt/deploy-sprint/team-01/.env"),
+                  "app_port": os.environ.get("APP_PORT", "8080"),
+                  "image": os.environ["APP_IMAGE"],
+                  "public_url": os.environ.get("PUBLIC_URL", ""),
+                  "runtime_env_keys": [
+                      "APP_VERSION",
+                      "APP_IMAGE",
+                      "APP_PORT",
+                      "PUBLIC_URL",
+                      "COMPOSE_PROJECT_NAME",
+                      "SERVICE_NAME",
+                      "RUNTIME_ENV_PATH",
+                      "TEAM_NAME",
+                      "TEAM_SLUG",
+                      "PUBLIC_DEPLOY_LABEL",
+                  ],
+                  "runtime_secret_names": [
+                      "PRIVATE_DEPLOY_TOKEN",
+                      "WEB3FORMS_ACCESS_KEY",
+                  ],
               },
           }
 
           print(json.dumps(payload))
           PY
+
+          echo "T22 compose deploy: project=${COMPOSE_PROJECT_NAME} env_path=${RUNTIME_ENV_PATH} image=${APP_IMAGE}"
 
           curl --fail-with-body --show-error --silent \
             -X POST \
@@ -124,4 +185,44 @@ jobs:
             "https://api.github.com/repos/${DEPLOYER_REPO}/dispatches" \
             --data @payload.json
 
-          echo "Requested organizer deployment for ${TEAM_REPO}@${TEAM_SHA}."
+          echo "Requested organizer compose deployment for ${TEAM_REPO}@${TEAM_SHA}."
+
+      - name: Post-deploy health check
+        continue-on-error: true
+        env:
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL || 'https://beginners.deploysprint-finals.knurdz.org' }}
+          EXPECTED_SHA: ${{ steps.request.outputs.sha }}
+        run: |
+          set -euo pipefail
+          base="${PUBLIC_URL%/}"
+          echo "Waiting for ${base}/health after compose deploy request..."
+          for attempt in $(seq 1 12); do
+            if curl -fsS "${base}/health" | grep -qx ok; then
+              echo "Health check passed on attempt ${attempt}."
+              if curl -fsS "${base}/status" | grep -q '"runtime"[[:space:]]*:[[:space:]]*"compose"'; then
+                echo "Status reports runtime=compose."
+              fi
+              if curl -fsS "${base}/status" | grep -q "${EXPECTED_SHA}"; then
+                echo "Status includes expected commit ${EXPECTED_SHA}."
+              fi
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Health check timed out; deployer may still be running compose up."
+
+      - name: T21 deploy concurrency summary
+        run: |
+          {
+            echo "## T21 production concurrency"
+            echo ""
+            echo "- concurrency group: \`production-${{ github.ref }}\`"
+            echo "- cancel-in-progress: \`false\` (overlapping deploy requests queue; VPS stays consistent)"
+            echo "- permissions: \`contents: read\`, \`actions: write\` (compose manifest artifact)"
+            echo ""
+            echo "## T22 compose runtime"
+            echo ""
+            echo "- manifest artifact: \`compose-deploy-request-${{ steps.request.outputs.sha }}\`"
+            echo "- remote \`.env\` path: \`${{ vars.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env' }}\` (generated at deploy, not in git)"
+            echo "- image: \`${{ steps.request.outputs.app_image }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
