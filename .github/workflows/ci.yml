@@ -95,6 +95,31 @@ jobs:
           fi
           echo "WEB3FORMS_ACCESS_KEY is configured for Web3Forms (value redacted)."
 
+      - name: Verify RESEND_API_KEY secret
+        id: resend_secret
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RESEND_API_KEY:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "RESEND_API_KEY is not configured."
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+          echo "RESEND_API_KEY is configured for Resend (value redacted)."
+
+      - name: Prepare Resend email alert evidence
+        id: resend_email
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || secrets.RESEND_FROM_EMAIL }}
+          ALERT_RECIPIENT_EMAIL: ${{ vars.ALERT_RECIPIENT_EMAIL || secrets.ALERT_RECIPIENT_EMAIL }}
+          EMAIL_PROVIDER: ${{ vars.EMAIL_PROVIDER || 'resend' }}
+          EMAIL_ALERT_MODE: ${{ vars.EMAIL_ALERT_MODE || 'dry-run' }}
+        run: node scripts/prepare-resend-email.mjs
+        working-directory: team-site
+
       - name: Build team-site
         env:
           TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
@@ -110,6 +135,7 @@ jobs:
           DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
           DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
           DOMAIN_CONNECTED: "true"
+
           TASK_MARKER: T22
           COMPOSE_RUNTIME: "true"
           COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01' }}
@@ -117,6 +143,7 @@ jobs:
           RUNTIME_ENV_PATH: ${{ vars.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env' }}
           APP_PORT: ${{ vars.APP_PORT || '8080' }}
           APP_IMAGE: ghcr.io/${{ github.repository }}/team-site:${{ github.sha }}
+
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret_main.outputs.configured || steps.deploy_secret_pr.outputs.configured }}
@@ -128,6 +155,14 @@ jobs:
           VITE_RELEASE_ID: ${{ github.run_id }}
           WEB3FORMS_CONFIGURED: "true"
           WEB3FORMS_ACCESS_KEY_CONFIGURED: "true"
+          WEB3FORMS_ACCESS_KEY: ${{ secrets.WEB3FORMS_ACCESS_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || secrets.RESEND_FROM_EMAIL }}
+          ALERT_RECIPIENT_EMAIL: ${{ vars.ALERT_RECIPIENT_EMAIL || secrets.ALERT_RECIPIENT_EMAIL }}
+          EMAIL_PROVIDER: ${{ vars.EMAIL_PROVIDER || 'resend' }}
+          EMAIL_ALERT_MODE: ${{ vars.EMAIL_ALERT_MODE || 'dry-run' }}
+          RESEND_CONFIGURED: ${{ steps.resend_secret.outputs.configured }}
+          RESEND_API_KEY_CONFIGURED: ${{ steps.resend_secret.outputs.configured }}
         run: npm run build
         working-directory: team-site
 
@@ -158,6 +193,7 @@ jobs:
           path: compose-deploy-manifest.json
           if-no-files-found: error
 
+
       - name: CI gate summary
         run: |
           set -euo pipefail
@@ -169,8 +205,10 @@ jobs:
             echo "- Build: \`npm run build\` in \`team-site/\`"
             echo "- Artifact: \`site-dist-${GITHUB_SHA}\` from \`team-site/dist\`"
             echo "- Feature flag: FEATURE_SHOW_INSIGHTS (value redacted; boolean only in /status)"
+
             echo "- T21: PR runs skip deploy secrets; permissions contents:read + actions:write (artifacts)"
             echo "- T22: \`docker compose config\` validated; artifact \`compose-deploy-${GITHUB_SHA}\`"
+
             echo "- Deploy is gated on this workflow succeeding on \`main\`"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "CI gate passed for commit ${GITHUB_SHA}."

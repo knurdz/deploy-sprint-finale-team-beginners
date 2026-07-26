@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -84,6 +84,7 @@ const contactEvidence = {
   accessKeyStoredInSecret: true,
 };
 
+
 const composeProjectName = process.env.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01';
 const serviceName = process.env.SERVICE_NAME || 'deploy-sprint-team-01';
 const runtimeEnvPath =
@@ -92,6 +93,7 @@ const appPort = process.env.APP_PORT || '8080';
 const appImageExplicit =
   process.env.APP_IMAGE || process.env.CONTAINER_IMAGE || process.env.VITE_APP_IMAGE;
 const appImageDefault = appImageExplicit || `deploy-sprint/team-site:${commit}`;
+
 
 const status = {
   team,
@@ -116,6 +118,9 @@ const status = {
   contact: contactEvidence,
   'contact.provider': 'web3forms',
   'contact.configured': web3formsConfigured,
+  email: emailEvidence,
+  'email.provider': 'resend',
+  'email.configured': emailConfigured,
 };
 
 if (previewPrNumber && previewBasePath) {
