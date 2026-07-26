@@ -42,7 +42,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T06 |  |  |  |
 | T07 |  |  |  |
 | T08 |  |  |  |
-| T09 |  |  |  |
+| T09 | [T09] Conflict Merge With Both Outcomes | `deadlines.ts` keeps `repo-setup-checkpoint` + `merge-conflict-lab`; no conflict markers; build | Merged `task-assets/conflict-merge`; preserved both main and organizer deadline cards |
 | T10 |  |  |  |
 | T11 |  |  |  |
 | T12 |  |  |  |
@@ -68,5 +68,6 @@ Use this section for short public notes and links. Full task instructions and ch
 ## Public Notes
 
 - T02: Domain evidence is in `/status` (`domain.connected`, assigned domain, A-record target) and `domain.config.json`. Verify HTTPS domain, plain HTTP domain/IP compatibility at `http://20.114.32.177`. No DNS portal credentials are committed.
+- T09: Conflicted file was `team-site/src/data/deadlines.ts`. Rule: keep both useful outcomes — main's `repo-setup-checkpoint` card and organizer `merge-conflict-lab` card from `task-assets/conflict-merge`. Verify with a source search for both ids and zero `<<<<<<<` / `=======` / `>>>>>>>` markers, then `npm run build` in `team-site/`.
 
 List anything judges should know without exposing credentials or private infrastructure details.
