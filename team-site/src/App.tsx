@@ -95,6 +95,10 @@ export function App() {
             <Mail size={18} />
             Contact
           </a>
+          <a href="./sentry-test.html">
+            <Activity size={18} />
+            Sentry test
+          </a>
         </nav>
 
         <div className="sidebarPanel">

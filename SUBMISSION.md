@@ -56,6 +56,15 @@ Use this section for short public notes and links. Full task instructions and ch
 | T19 |  |  |  |
 | T20 |  |  |  |
 | T21 |  | Workflow YAML + Actions queue evidence | `docs/workflow-safety.md`; `production-*` deploy concurrency |
+| T22 |  | `compose.yml`, `compose-deploy-<sha>`, `/status` `runtime=compose` | `docs/compose-runtime.md`; remote `.env` at deploy only |
+| T23 |  |  |  |
+| T24 |  |  |  |
+| T25 |  |  |  |
+| T26 |  |  |  |
+| T27 |  | Secret scan workflow + CI step | `docs/incidents/secret-leak-drill.md`; no `leaky-debug.yml` |
+| T28 |  |  |  |
+| T29 |  |  |  |
+| T30 |  | `/status` monitoring + `sentry-test.html` | `docs/sentry-monitoring.md`; CI Sentry release step |
 | T22 |  |  |  |
 | T23 | [T23] Release Evidence Manifest | `release-manifest.json` artifact + `/status.releaseManifest` | commit, artifact, workflowRun, deployedAt, taskMarkers |
 | T24 |  |  |  |
@@ -74,6 +83,9 @@ Use this section for short public notes and links. Full task instructions and ch
 - T09: Conflicted file was `team-site/src/data/deadlines.ts`. Rule: keep both useful outcomes — main's `repo-setup-checkpoint` card and organizer `merge-conflict-lab` card from `task-assets/conflict-merge`. Verify with a source search for both ids and zero `<<<<<<<` / `=======` / `>>>>>>>` markers, then `npm run build` in `team-site/`.
 - T06: CI workflow (`.github/workflows/ci.yml`) runs on `pull_request` and `push` to `main`. It uses Node 20, `npm ci` from `team-site/package-lock.json`, `npm run build` in `team-site/`, and uploads `team-site/dist` as `site-dist-<sha>`. `Request Organizer Deploy` only continues when that CI workflow succeeds on `main`.
 - T21: Every workflow under `.github/workflows/` declares explicit `permissions` and `concurrency`. Production deploy and rollback share `production-${{ github.ref }}` with `cancel-in-progress: false`. PR CI and PR Preview do not read deploy secrets. See `docs/workflow-safety.md`.
+- T22: `compose.yml` + `.env.example` (names only); CI validates `docker compose config`; deploy request uses `deploy_mode: compose` and generates remote env at `RUNTIME_ENV_PATH`. See `docs/compose-runtime.md`.
+- T27: Fetched `task-assets/secret-leak`, rejected merging seeded leak files; added `scripts/secret-scan.mjs` + `secret-scan.yml` + CI gate. See `docs/incidents/secret-leak-drill.md`.
+- T30: `@sentry/react`, `prepare-sentry.mjs`, CI `sentry-cli` release; judge path `sentry-test.html`. Secrets: `SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`. See `docs/sentry-monitoring.md`.
 
 List anything judges should know without exposing credentials or private infrastructure details.
 
@@ -99,6 +111,28 @@ List anything judges should know without exposing credentials or private infrast
 - CI concurrency: `ci-${{ github.workflow }}-${{ github.ref }}`, `cancel-in-progress: true`.
 - PR workflows: no `PRIVATE_DEPLOY_TOKEN` / deployer secret references on `pull_request` events.
 - Verify: push two quick commits to `main` or double `workflow_dispatch` deploy; confirm one deploy run queues in Actions.
+
+### T22 compose runtime service
+
+- `compose.yml`: service `deploy-sprint-team-01`, `restart: unless-stopped`, healthcheck on `/health`, `env_file` for runtime `.env`.
+- `.env.example`: placeholder names only; real file at `/opt/deploy-sprint/team-01/.env` created by deployer (not committed).
+- CI: `scripts/validate-compose-config.mjs` + artifact `compose-deploy-<sha>`.
+- `/status`: `runtime: compose` and `compose` block when built with `COMPOSE_RUNTIME=true`.
+
+### T27 secret leak drill
+
+- Asset branch: `origin/task-assets/secret-leak` (rehearsal workflow + seeded fake token — do not merge verbatim).
+- Removed/blocked: no `.github/workflows/leaky-debug.yml`; no drill token string in repo.
+- Prevention: `node scripts/secret-scan.mjs`, workflow `.github/workflows/secret-scan.yml`, and CI step before build.
+- Verify: green Secret scan workflow on PR; local `node scripts/secret-scan.mjs` exits 0.
+
+### T30 Sentry monitoring release
+
+- Install: `@sentry/react` in `team-site/`.
+- Init: `src/sentry.ts` + generated `src/config/sentry-runtime.ts` (DSN only).
+- CI: verify four Sentry secrets; `sentry-cli releases` + sourcemaps after build.
+- Test error: open `sentry-test.html`, click **Send test error to Sentry** (once, for judges).
+- `/status`: `monitoring.provider=sentry`, `monitoring.release` = commit SHA.
 
 ### T15 runtime feature flag
 

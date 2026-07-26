@@ -128,6 +128,14 @@ const contactEvidence = {
   accessKeyStoredInSecret: true,
 };
 
+const composeProjectName = process.env.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01';
+const serviceName = process.env.SERVICE_NAME || 'deploy-sprint-team-01';
+const runtimeEnvPath =
+  process.env.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env';
+const appPort = process.env.APP_PORT || '8080';
+const appImageExplicit =
+  process.env.APP_IMAGE || process.env.CONTAINER_IMAGE || process.env.VITE_APP_IMAGE;
+const appImageDefault = appImageExplicit || `deploy-sprint/team-site:${commit}`;
 // T16: Resend readiness only — never write API key, response tokens, or addresses.
 // Prefer artifact from prepare-resend-email.mjs; fall back to boolean CI flags only.
 let emailConfigured =
@@ -202,6 +210,35 @@ if (previewPrNumber && previewBasePath) {
   status.previewUrl = previewUrl;
 }
 
+if (taskMarker === 'T22' || process.env.COMPOSE_RUNTIME === 'true') {
+  status.runtime = 'compose';
+  status.compose = {
+    projectName: composeProjectName,
+    serviceName,
+    runtimeEnvPath,
+    appPort: Number(appPort),
+    appImage: appImageDefault,
+    release: commit,
+    envGeneratedAtDeploy: true,
+  };
+}
+
+const sentryConfigured =
+  process.env.SENTRY_DSN_CONFIGURED === 'true' || process.env.SENTRY_CONFIGURED === 'true';
+const sentryReleaseName = process.env.SENTRY_RELEASE || commit;
+
+if (sentryConfigured || taskMarker === 'T30') {
+  status.monitoring = {
+    provider: 'sentry',
+    configured: sentryConfigured,
+    release: sentryReleaseName,
+    org: process.env.SENTRY_ORG || '',
+    project: process.env.SENTRY_PROJECT || '',
+    releaseAutomation: process.env.SENTRY_RELEASE_AUTOMATION === 'true',
+    authTokenStoredInSecret: true,
+    testErrorPath: './sentry-test.html',
+  };
+  status['monitoring.provider'] = 'sentry';
 if (taskMarker === 'T18' || containerImageExplicit) {
   status.container = {
     name: containerName,
