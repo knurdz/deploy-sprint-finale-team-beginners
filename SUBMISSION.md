@@ -135,7 +135,17 @@ List anything judges should know without exposing credentials or private infrast
 - Client marker: `team-site/src/config/emailAlerts.ts` (provider/secret name only; no key).
 - Verify: CI summary + `site-dist-<sha>` artifact contains redacted status; search repo/artifacts for no `re_` key values.
 
-### T28 race-safe idempotent deploy
+
+### T29 disaster recovery from Actions only
+
+- Workflow: `.github/workflows/recover.yml` (`workflow_dispatch` inputs `restore_target`, `dry_run` default `true`).
+- Runbook: `docs/recovery.md`.
+- Recreates (in order): app directories → env placeholders → container/service config → release pointer (artifact + GHCR image) → service recreate → verify.
+- No-live: dry-run uploads `recovery-manifest-<run_id>` + `recovery-runtime/` (`manual_vps_repair: false`).
+- Live: `dry_run=false` requests organizer container redeploy for the confirmed SHA (Actions secrets only; no SSH).
+- Cite log: `Log line proving restore target: restore_target=<sha>`.
+- Judge answer: recreate directories, then env placeholders, then container config, then bind latest confirmed artifact/image, then start/redeploy service via Actions, then verify `/health` + `/status`.
+
 
 - Starter lock adapted in `scripts/idempotent-deploy.sh` (`mkdir` lock dir + `trap` cleanup).
 - Deploy workflow concurrency: `group: production-deploy-beginners`, `cancel-in-progress: false` (queue, don't cancel).
