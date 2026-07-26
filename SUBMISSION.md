@@ -50,7 +50,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T13 |  |  |  |
 | T14 |  |  |  |
 | T15 | [T15] Runtime Feature Flag | `/status` `featureFlags` + Insights UI | `FEATURE_SHOW_INSIGHTS` secret/var → `VITE_FEATURE_SHOW_INSIGHTS`; no hardcoded flag |
-| T16 |  |  |  |
+| T16 | [T16] Resend Email Alerts | `/status` email + `/email/status.json` | Secret name only: `RESEND_API_KEY`; CI dry-run evidence |
 | T17 |  |  |  |
 | T18 |  |  |  |
 | T19 |  |  |  |
@@ -99,6 +99,7 @@ List anything judges should know without exposing credentials or private infrast
 - Verify on: set to `true`, rebuild; panel visible; status `showInsights: true`.
 - Incident disable: set `FEATURE_SHOW_INSIGHTS=false` and redeploy (no source change).
 
+
 ### T23 release evidence manifest
 
 - Starter adapted to `team-site/scripts/write-release-manifest.mjs` (also written during `write-release-evidence.mjs`).
@@ -106,3 +107,13 @@ List anything judges should know without exposing credentials or private infrast
 - Manifest fields: `task`, `commit`, `artifact` (`site-dist-<sha>`), `workflowRun`, `deployedAt`/`deployTime`, `taskMarkers`, `secretsRedacted`.
 - Safe exposure: `/status.releaseManifest` and `/release-manifest.json` in the dist artifact.
 - Verify: download Actions artifact or open `/release-manifest.json` and confirm `commit` matches the scored SHA.
+
+### T16 Resend email alerts
+
+- API key lives only as GitHub Secret `RESEND_API_KEY` (never `VITE_`, never committed).
+- Send/simulate path: `team-site/scripts/prepare-resend-email.mjs` (CI/deploy-time Node only).
+- Default `EMAIL_ALERT_MODE=dry-run` — no network send; optional `send` uses Resend API from env.
+- Evidence: `/status` `email.provider=resend`, `email.configured=true`, `secretRedacted=true` plus `/email/status.json`.
+- Client marker: `team-site/src/config/emailAlerts.ts` (provider/secret name only; no key).
+- Verify: CI summary + `site-dist-<sha>` artifact contains redacted status; search repo/artifacts for no `re_` key values.
+
