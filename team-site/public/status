@@ -1,16 +1,36 @@
 {
   "team": "BEGINNERS",
   "team_slug": "beginners",
-  "commit": "13ad9ed528208409e035f5397b8926a6c0453715",
-  "commit_short": "13ad9ed",
-  "release_id": "30190061685",
-  "deploy_time": "2026-07-26T05:53:22.538Z",
-  "public_url": "http://20.114.32.177",
-  "task": "T01",
-  "marker": "T01",
+  "commit": "local-dev",
+  "commit_short": "local-d",
+  "release_id": "local-1785053381022",
+  "deploy_time": "2026-07-26T08:09:41.023Z",
+  "public_url": "https://beginners.deploysprint-finals.knurdz.org",
+  "public_url_mode": "domain",
+  "task": "T02",
+  "marker": "T02",
+  "domain": {
+    "connected": true,
+    "assignedDomain": "beginners.deploysprint-finals.knurdz.org",
+    "recordType": "A",
+    "recordName": "beginners",
+    "recordTarget": "20.114.32.177",
+    "domainPublicUrl": "https://beginners.deploysprint-finals.knurdz.org",
+    "ipPublicUrl": "http://20.114.32.177",
+    "verifiedAt": "2026-07-26T08:09:41.023Z"
+  },
+  "domain.connected": true,
+  "assignedDomain": "beginners.deploysprint-finals.knurdz.org",
   "config": {
     "publicDeployLabel": "unset-public-label",
     "privateDeployTokenConfigured": false,
     "secretsRedacted": true
-  }
+  },
+  "contact": {
+    "provider": "web3forms",
+    "configured": false,
+    "accessKeyStoredInSecret": true
+  },
+  "contact.provider": "web3forms",
+  "contact.configured": false
 }

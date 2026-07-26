@@ -1,10 +1,14 @@
+import { ReleaseReadiness } from './components/ReleaseReadiness';
+import { useEffect, useState } from 'react';
 import {
   Activity,
   Bell,
   BookOpen,
   CalendarCheck,
+  CloudSun,
   GitBranch,
   GraduationCap,
+  Mail,
   Search,
   ShieldCheck,
   Users,
@@ -16,11 +20,46 @@ import { courses } from './data/courses';
 import { deadlineCards } from './data/deadlines';
 import { sprintStats } from './data/stats';
 import { getPublicDeployLabel } from './config/deploy';
+import { featureFlags } from './config/featureFlags';
 import { getAverageProgress } from './utils/metrics';
+
+interface WeatherData {
+  city?: string;
+  temp?: number;
+  weather?: string;
+  provider?: string;
+}
+
+function WeatherWidget() {
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+
+  useEffect(() => {
+    fetch('/api/weather.json')
+      .then((res) => {
+        if (!res.ok) throw new Error('Weather data unavailable');
+        return res.json();
+      })
+      .then((data) => setWeather(data))
+      .catch(() => setWeather(null));
+  }, []);
+
+  return (
+    <div className="sidebarPanel" style={{ marginTop: '12px' }}>
+      <CloudSun size={18} />
+      <p style={{ fontWeight: '600' }}>
+        {weather ? `${weather.city || 'Colombo'}: ${weather.temp !== undefined ? `${weather.temp}°C` : ''} (${weather.weather || 'Clear'})` : 'Weather Integration Active'}
+      </p>
+      <p className="deployLabel">
+        Provider: {weather?.provider || 'openweather'}
+      </p>
+    </div>
+  );
+}
 
 export function App() {
   const averageProgress = getAverageProgress(courses);
   const publicDeployLabel = getPublicDeployLabel();
+  const flags = featureFlags();
 
   return (
     <main className="shell">
@@ -52,6 +91,10 @@ export function App() {
             <Users size={18} />
             Teams
           </a>
+          <a href="./contact.html">
+            <Mail size={18} />
+            Contact
+          </a>
         </nav>
 
         <div className="sidebarPanel">
@@ -61,6 +104,16 @@ export function App() {
             Release channel: {publicDeployLabel}
           </p>
         </div>
+
+        <WeatherWidget />
+
+        {flags.showInsights ? (
+          <div className="sidebarPanel" data-testid="feature-insights" style={{ marginTop: '12px' }}>
+            <Activity size={18} />
+            <p style={{ fontWeight: 600 }}>Insights panel (T15)</p>
+            <p className="deployLabel">Controlled by FEATURE_SHOW_INSIGHTS (value redacted)</p>
+          </div>
+        ) : null}
       </aside>
 
       <section className="workspace">
@@ -102,6 +155,7 @@ export function App() {
         </section>
 
         <section className="contentGrid">
+        <ReleaseReadiness />
           <div className="panel" id="courses">
             <div className="panelHeader">
               <div>
