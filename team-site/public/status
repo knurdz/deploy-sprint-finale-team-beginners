@@ -1,0 +1,10 @@
+{
+  "team": "BEGINNERS",
+  "task": "T05",
+  "marker": "T05",
+  "config": {
+    "publicDeployLabel": "BEGINNERS-DEPLOY-LABEL",
+    "privateDeployTokenConfigured": true,
+    "secretsRedacted": true
+  }
+}
