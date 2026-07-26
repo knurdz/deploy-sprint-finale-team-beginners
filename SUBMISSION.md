@@ -42,7 +42,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T06 | [T06] CI Gate Before Deployment | `.github/workflows/ci.yml` Node 20 + `npm ci` + build + `site-dist-<sha>`; deploy gated on CI success | See Public Notes |
 | T07 | [T07] OpenWeather API Widget | Merged |  |
 | T08 |  |  |  |
-| T09 |  |  |  |
+| T09 | [T09] Conflict Merge With Both Outcomes | `deadlines.ts` keeps `repo-setup-checkpoint` + `merge-conflict-lab`; no conflict markers; build | Merged `task-assets/conflict-merge`; preserved both main and organizer deadline cards |
 | T10 | [T10] Web3Forms Contact Service | `/contact`, `contact.html`, `/status` contact.provider | Secret name only: `WEB3FORMS_ACCESS_KEY` |
 | T11 |  |  |  |
 | T12 | [T12] Fast Dependency Pipeline | CI summary: cache-hit + npm ci + audit | `setup-node` cache keyed on `team-site/package-lock.json`; `npm ci` always runs |
@@ -68,6 +68,7 @@ Use this section for short public notes and links. Full task instructions and ch
 ## Public Notes
 
 - T02: Domain evidence is in `/status` (`domain.connected`, assigned domain, A-record target) and `domain.config.json`. Verify HTTPS domain, plain HTTP domain/IP compatibility at `http://20.114.32.177`. No DNS portal credentials are committed.
+- T09: Conflicted file was `team-site/src/data/deadlines.ts`. Rule: keep both useful outcomes — main's `repo-setup-checkpoint` card and organizer `merge-conflict-lab` card from `task-assets/conflict-merge`. Verify with a source search for both ids and zero `<<<<<<<` / `=======` / `>>>>>>>` markers, then `npm run build` in `team-site/`.
 - T06: CI workflow (`.github/workflows/ci.yml`) runs on `pull_request` and `push` to `main`. It uses Node 20, `npm ci` from `team-site/package-lock.json`, `npm run build` in `team-site/`, and uploads `team-site/dist` as `site-dist-<sha>`. `Request Organizer Deploy` only continues when that CI workflow succeeds on `main`.
 
 List anything judges should know without exposing credentials or private infrastructure details.
