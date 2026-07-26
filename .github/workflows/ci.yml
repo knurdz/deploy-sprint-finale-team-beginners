@@ -154,6 +154,8 @@ jobs:
           CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
           APP_PORT: ${{ vars.APP_PORT || '8080' }}
           CONTAINER_IMAGE: ${{ steps.container.outputs.image }}
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T14,T15,T23
+
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret_main.outputs.configured || steps.deploy_secret_pr.outputs.configured }}
@@ -183,6 +185,7 @@ jobs:
           DEPLOY_TIME: ${{ github.run_started_at }}
           BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
           COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T15,T16,T18,T21,T23,T26
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T14,T15,T23
         run: node team-site/scripts/write-release-manifest.mjs
 
       - name: Copy release manifest into dist
@@ -236,6 +239,8 @@ jobs:
           PY
 
       - name: Build container image
+      - name: Build production Docker image (T14)
+        id: docker_build
         env:
           IMAGE: ${{ steps.container.outputs.image }}
           LOCAL_TAG: ${{ steps.container.outputs.local_tag }}
@@ -247,7 +252,7 @@ jobs:
           set -euo pipefail
           docker build \
             --build-arg GITHUB_SHA="${GITHUB_SHA}" \
-            --build-arg TASK_MARKER=T18 \
+            --build-arg TASK_MARKER=T14 \
             --build-arg CONTAINER_IMAGE="${IMAGE}" \
             --build-arg CONTAINER_NAME="${CONTAINER_NAME}" \
             --build-arg APP_PORT="${APP_PORT}" \
@@ -256,7 +261,45 @@ jobs:
             -t "${IMAGE}" \
             -t "${LOCAL_TAG}" \
             team-site
-          echo "Built container images ${IMAGE} and ${LOCAL_TAG}"
+          image_id="$(docker image inspect --format='{{.Id}}' "${LOCAL_TAG}")"
+          {
+            echo "image_id=${image_id}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Built production images ${IMAGE} and ${LOCAL_TAG} id=${image_id}"
+
+      - name: Smoke-test Docker image serves app
+        env:
+          LOCAL_TAG: ${{ steps.container.outputs.local_tag }}
+        run: |
+          set -euo pipefail
+          cid="$(docker run -d -p 18080:80 "${LOCAL_TAG}")"
+          cleanup() { docker rm -f "${cid}" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS "http://127.0.0.1:18080/health" | grep -qx ok; then
+              echo "Docker image /health ok"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Docker image failed /health smoke test"
+          docker logs "${cid}" || true
+          exit 1
+
+      - name: Write Docker image evidence (T14)
+        env:
+          DOCKER_IMAGE_TAG: ${{ steps.container.outputs.image }}
+          DOCKER_IMAGE_ID: ${{ steps.docker_build.outputs.image_id }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: node team-site/scripts/write-docker-image-evidence.mjs
+
+      - name: Upload Docker image evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-evidence-${{ github.sha }}
+          path: docker-image-evidence.json
+          if-no-files-found: error
 
       - name: Log in to GitHub Container Registry
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -304,7 +347,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## T06 CI gate + T18 container build"
+            echo "## T06 CI gate + T14 Docker image + T18 container build"
             echo ""
             echo "- Node: 20"
             echo "- Install: \`npm ci\` (team-site lockfile)"
@@ -312,6 +355,11 @@ jobs:
             echo "- Artifact: \`site-dist-${GITHUB_SHA}\` from \`team-site/dist\`"
             echo "- Feature flag: FEATURE_SHOW_INSIGHTS (value redacted; boolean only in /status)"
             echo "- T21: PR runs skip deploy secrets; permissions contents:read + actions:write + packages:write"
+            echo "- Dockerfile: \`team-site/Dockerfile\` (build + nginx runtime)"
+            echo "- Image tag: \`${{ steps.container.outputs.image }}\`"
+            echo "- Image id: \`${{ steps.docker_build.outputs.image_id }}\`"
+            echo "- Docker evidence artifact: \`docker-image-evidence-${GITHUB_SHA}\`"
+            echo "- T21: PR runs skip deploy secrets; permissions contents:read + actions:write (artifacts)"
             echo "- Container image: \`${{ steps.container.outputs.image }}\`"
             echo "- Container manifest artifact: \`container-deploy-${GITHUB_SHA}\`"
             echo "- Deploy is gated on this workflow succeeding on \`main\`"

@@ -1,3 +1,5 @@
+# T14: production image for the Vite team-site app (multi-stage).
+# Build context must be team-site/ so package-lock.json is used by npm ci.
 FROM node:20-alpine AS build
 WORKDIR /app
 
@@ -7,7 +9,7 @@ RUN npm ci
 COPY . .
 
 ARG GITHUB_SHA=local-dev
-ARG TASK_MARKER=T18
+ARG TASK_MARKER=T14
 ARG CONTAINER_IMAGE=
 ARG CONTAINER_NAME=deploy-sprint-team-01
 ARG APP_PORT=8080
@@ -34,11 +36,8 @@ ENV GITHUB_SHA=$GITHUB_SHA \
 RUN npm run build
 
 FROM nginx:alpine
-
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
-
 EXPOSE 80
-
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1/health | grep -qx ok || exit 1
