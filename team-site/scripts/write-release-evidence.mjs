@@ -48,6 +48,10 @@ const publicUrl =
     : process.env.PUBLIC_URL || ipPublicUrl || process.env.VITE_PUBLIC_URL || ipPublicUrl;
 
 const taskMarker = process.env.TASK_MARKER || 'T02';
+const previewPrNumber = process.env.PREVIEW_PR_NUMBER;
+const previewBasePath =
+  process.env.PREVIEW_BASE_PATH ||
+  (previewPrNumber ? `/previews/pr-${previewPrNumber}` : undefined);
 
 const domainEvidence = {
   connected: domainConnected,
@@ -80,6 +84,17 @@ const status = {
     secretsRedacted: true,
   },
 };
+
+if (previewPrNumber && previewBasePath) {
+  const previewUrl = `${publicUrl.replace(/\/$/, '')}${previewBasePath}/`;
+  status.preview = {
+    pr: Number(previewPrNumber),
+    previewUrl,
+    previewBasePath,
+    productionStatusMustNotChange: true,
+  };
+  status.previewUrl = previewUrl;
+}
 
 const domainConfig = {
   assignedDomain,

@@ -44,7 +44,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T08 |  |  |  |
 | T09 |  |  |  |
 | T10 |  |  |  |
-| T11 |  |  |  |
+| T11 | PR Preview workflow + artifact | PR comment / Actions summary | See `docs/preview-deployment.md`; artifact `pr-preview-<PR#>-<sha>` |
 | T12 |  |  |  |
 | T13 |  |  |  |
 | T14 |  |  |  |
