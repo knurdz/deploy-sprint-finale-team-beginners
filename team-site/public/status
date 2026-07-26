@@ -3,8 +3,8 @@
   "team_slug": "beginners",
   "commit": "local-dev",
   "commit_short": "local-d",
-  "release_id": "local-1785050065413",
-  "deploy_time": "2026-07-26T07:14:25.413Z",
+  "release_id": "local-1785053381022",
+  "deploy_time": "2026-07-26T08:09:41.023Z",
   "public_url": "https://beginners.deploysprint-finals.knurdz.org",
   "public_url_mode": "domain",
   "task": "T02",
@@ -17,13 +17,13 @@
     "recordTarget": "20.114.32.177",
     "domainPublicUrl": "https://beginners.deploysprint-finals.knurdz.org",
     "ipPublicUrl": "http://20.114.32.177",
-    "verifiedAt": "2026-07-26T07:14:25.413Z"
+    "verifiedAt": "2026-07-26T08:09:41.023Z"
   },
   "domain.connected": true,
   "assignedDomain": "beginners.deploysprint-finals.knurdz.org",
   "config": {
-    "publicDeployLabel": "BEGINNERS-DEPLOY-LABEL",
-    "privateDeployTokenConfigured": true,
+    "publicDeployLabel": "unset-public-label",
+    "privateDeployTokenConfigured": false,
     "secretsRedacted": true
   },
   "contact": {
