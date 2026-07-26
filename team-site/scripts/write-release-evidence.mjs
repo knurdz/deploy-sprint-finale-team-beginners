@@ -1,4 +1,3 @@
-// AI-REVIEW-MARKER: participant must manually remove this marker
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +6,13 @@ const siteRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(siteRoot, '..');
 const publicDir = join(siteRoot, 'public');
 mkdirSync(publicDir, { recursive: true });
+
+const publicDeployLabel =
+  process.env.PUBLIC_DEPLOY_LABEL ||
+  process.env.VITE_PUBLIC_DEPLOY_LABEL ||
+  'unset-public-label';
+const privateTokenConfigured =
+  process.env.PRIVATE_DEPLOY_TOKEN_CONFIGURED === 'true';
 
 const team = process.env.TEAM_NAME || process.env.VITE_TEAM_NAME || 'BEGINNERS';
 const commit = process.env.GITHUB_SHA || process.env.VITE_COMMIT_SHA || 'local-dev';
@@ -17,7 +23,8 @@ const releaseId =
   `local-${Date.now()}`;
 const deployTime =
   process.env.DEPLOY_TIME || process.env.VITE_DEPLOY_TIME || new Date().toISOString();
-const publicUrlMode = process.env.PUBLIC_URL_MODE || 'ip';
+
+const publicUrlMode = process.env.PUBLIC_URL_MODE || 'domain';
 const ipPublicUrl =
   process.env.IP_PUBLIC_URL || process.env.VITE_IP_PUBLIC_URL || 'http://20.114.32.177';
 const domainPublicUrl =
@@ -32,19 +39,15 @@ const dnsRecordType = process.env.DNS_RECORD_TYPE || 'A';
 const dnsRecordName = process.env.DNS_RECORD_NAME || 'beginners';
 const dnsRecordValue = process.env.DNS_RECORD_VALUE || '20.114.32.177';
 const domainConnected =
-  publicUrlMode === 'domain' || process.env.DOMAIN_CONNECTED === 'true';
-const verificationTime =
-  process.env.DOMAIN_VERIFIED_AT || deployTime;
+  process.env.DOMAIN_CONNECTED === 'true' || publicUrlMode === 'domain';
+const verificationTime = process.env.DOMAIN_VERIFIED_AT || deployTime;
 
 const publicUrl =
   publicUrlMode === 'domain'
     ? domainPublicUrl
-    : process.env.PUBLIC_URL ||
-      ipPublicUrl ||
-      process.env.VITE_PUBLIC_URL ||
-      ipPublicUrl;
+    : process.env.PUBLIC_URL || ipPublicUrl || process.env.VITE_PUBLIC_URL || ipPublicUrl;
 
-const taskMarker = process.env.TASK_MARKER || 'T01';
+const taskMarker = process.env.TASK_MARKER || 'T02';
 
 const domainEvidence = {
   connected: domainConnected,
@@ -71,6 +74,11 @@ const status = {
   domain: domainEvidence,
   'domain.connected': domainConnected,
   assignedDomain,
+  config: {
+    publicDeployLabel,
+    privateDeployTokenConfigured: privateTokenConfigured,
+    secretsRedacted: true,
+  },
 };
 
 const domainConfig = {

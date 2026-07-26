@@ -62,6 +62,17 @@ jobs:
             echo "source_run_id=$source_run_id"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Authorize deploy with private token (server-side only)
+        env:
+          PRIVATE_DEPLOY_TOKEN: ${{ secrets.PRIVATE_DEPLOY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PRIVATE_DEPLOY_TOKEN:-}" ]; then
+            echo "PRIVATE_DEPLOY_TOKEN is not configured."
+            exit 1
+          fi
+          echo "Deploy authorized using masked PRIVATE_DEPLOY_TOKEN."
+
       - name: Request deploy from organizer deployer
         env:
           DEPLOYER_DISPATCH_TOKEN: ${{ secrets.DEPLOYER_DISPATCH_TOKEN }}

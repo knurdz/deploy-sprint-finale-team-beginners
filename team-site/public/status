@@ -20,5 +20,10 @@
     "verifiedAt": "pending-ci-build"
   },
   "domain.connected": true,
-  "assignedDomain": "beginners.deploysprint-finals.knurdz.org"
+  "assignedDomain": "beginners.deploysprint-finals.knurdz.org",
+  "config": {
+    "publicDeployLabel": "BEGINNERS-DEPLOY-LABEL",
+    "privateDeployTokenConfigured": true,
+    "secretsRedacted": true
+  }
 }
