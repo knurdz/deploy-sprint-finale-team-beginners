@@ -10,7 +10,7 @@ Organizer baseline:
 
 | Workflow | Permissions | Why beyond `contents: read` |
 | --- | --- | --- |
-| **CI** | `contents: read`, `actions: write` | Upload `site-dist-<sha>` and job summaries |
+| **CI** | `contents: read`, `actions: write`, `packages: write` | Upload artifacts; push container image to GHCR on `main` |
 | **PR Preview** | `contents: read`, `pull-requests: write`, `actions: read` | PR comment + artifact download links; no repo write |
 | **Request Organizer Deploy** | `contents: read`, `actions: read` | Read-only; deploy uses `repository_dispatch` curl + secrets (not `GITHUB_TOKEN` write) |
 | **Rollback** | `contents: read`, `actions: read` | Manifest artifact; optional deployer dispatch on manual `dry_run=false` |
