@@ -1,6 +1,7 @@
 name: Request Organizer Deploy
 
 # T06: deployment runs only after the CI workflow succeeds on main (workflow_run).
+# T21: production concurrency queue; minimal permissions (no repository write).
 
 on:
   workflow_run:
@@ -13,9 +14,10 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: request-organizer-deploy
+  group: production-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -125,3 +127,13 @@ jobs:
             --data @payload.json
 
           echo "Requested organizer deployment for ${TEAM_REPO}@${TEAM_SHA}."
+
+      - name: T21 deploy concurrency summary
+        run: |
+          {
+            echo "## T21 production concurrency"
+            echo ""
+            echo "- concurrency group: \`production-${{ github.ref }}\`"
+            echo "- cancel-in-progress: \`false\` (overlapping deploy requests queue; VPS stays consistent)"
+            echo "- permissions: \`contents: read\`, \`actions: read\` only"
+          } >> "$GITHUB_STEP_SUMMARY"
