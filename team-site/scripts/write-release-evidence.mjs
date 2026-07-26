@@ -84,6 +84,15 @@ const contactEvidence = {
   accessKeyStoredInSecret: true,
 };
 
+const composeProjectName = process.env.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01';
+const serviceName = process.env.SERVICE_NAME || 'deploy-sprint-team-01';
+const runtimeEnvPath =
+  process.env.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env';
+const appPort = process.env.APP_PORT || '8080';
+const appImageExplicit =
+  process.env.APP_IMAGE || process.env.CONTAINER_IMAGE || process.env.VITE_APP_IMAGE;
+const appImageDefault = appImageExplicit || `deploy-sprint/team-site:${commit}`;
+
 const status = {
   team,
   team_slug: process.env.TEAM_SLUG || 'beginners',
@@ -118,6 +127,19 @@ if (previewPrNumber && previewBasePath) {
     productionStatusMustNotChange: true,
   };
   status.previewUrl = previewUrl;
+}
+
+if (taskMarker === 'T22' || process.env.COMPOSE_RUNTIME === 'true') {
+  status.runtime = 'compose';
+  status.compose = {
+    projectName: composeProjectName,
+    serviceName,
+    runtimeEnvPath,
+    appPort: Number(appPort),
+    appImage: appImageDefault,
+    release: commit,
+    envGeneratedAtDeploy: true,
+  };
 }
 
 const domainConfig = {
