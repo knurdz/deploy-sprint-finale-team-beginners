@@ -1,5 +1,7 @@
 name: Deploy dashboard
 
+# T21: Pages deploy uses scoped permissions; separate concurrency from VPS production deploy.
+
 on:
   push:
     branches:
@@ -7,7 +9,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:

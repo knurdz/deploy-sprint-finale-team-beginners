@@ -1,5 +1,7 @@
 name: CI
 
+# T21: explicit least-privilege permissions; PR runs do not read deploy secrets.
+
 on:
   pull_request:
   push:
@@ -8,6 +10,11 @@ on:
 
 permissions:
   contents: read
+  actions: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
   packages: write
 
 jobs:
@@ -26,8 +33,9 @@ jobs:
           cache: npm
           cache-dependency-path: team-site/package-lock.json
 
-      - name: Check private deploy token (Actions only)
-        id: deploy_secret
+      - name: Check private deploy token (push to main only)
+        id: deploy_secret_main
+        if: github.event_name == 'push'
         env:
           PRIVATE_DEPLOY_TOKEN: ${{ secrets.PRIVATE_DEPLOY_TOKEN }}
         run: |
@@ -40,6 +48,14 @@ jobs:
             echo "PRIVATE_DEPLOY_TOKEN is not configured."
             exit 1
           fi
+
+      - name: PR CI without deploy secrets (T21)
+        id: deploy_secret_pr
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          echo "Pull request CI does not read PRIVATE_DEPLOY_TOKEN or deployer secrets."
 
       - name: Install from team-site lockfile
         run: npm ci
@@ -114,7 +130,7 @@ jobs:
 
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
-          PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret.outputs.configured }}
+          PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret_main.outputs.configured || steps.deploy_secret_pr.outputs.configured }}
           FEATURE_SHOW_INSIGHTS: ${{ secrets.FEATURE_SHOW_INSIGHTS || vars.FEATURE_SHOW_INSIGHTS || 'false' }}
           VITE_FEATURE_SHOW_INSIGHTS: ${{ secrets.FEATURE_SHOW_INSIGHTS || vars.FEATURE_SHOW_INSIGHTS || 'false' }}
           VITE_PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
@@ -283,6 +299,8 @@ jobs:
             echo "- Image tag: \`${{ steps.container.outputs.image }}\`"
             echo "- Image id: \`${{ steps.docker_build.outputs.image_id }}\`"
             echo "- Docker evidence artifact: \`docker-image-evidence-${GITHUB_SHA}\`"
+            echo "- T21: PR runs skip deploy secrets; permissions contents:read + actions:write (artifacts)"
+            echo "- Container image: \`${{ steps.container.outputs.image }}\`"
             echo "- Container manifest artifact: \`container-deploy-${GITHUB_SHA}\`"
             echo "- Deploy is gated on this workflow succeeding on \`main\`"
             echo ""
