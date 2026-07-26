@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: request-organizer-deploy
@@ -65,11 +66,45 @@ jobs:
             exit 1
           fi
 
+          artifact_name="site-dist-${sha}"
+
           {
             echo "sha=$sha"
             echo "branch=$branch"
             echo "source_run_id=$source_run_id"
+            echo "artifact_name=$artifact_name"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Download immutable CI artifact (no npm rebuild)
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.request.outputs.artifact_name }}
+          path: deploy-dist
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Confirm downloaded artifact (no rebuild)
+        if: github.event_name == 'workflow_run'
+        env:
+          ARTIFACT_NAME: ${{ steps.request.outputs.artifact_name }}
+          COMMIT_SHA: ${{ steps.request.outputs.sha }}
+          SOURCE_RUN_ID: ${{ steps.request.outputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          test -f deploy-dist/index.html
+          test -f deploy-dist/status
+          test -f deploy-dist/health
+          echo "Consuming artifact ${ARTIFACT_NAME} from CI run ${SOURCE_RUN_ID} for commit ${COMMIT_SHA}"
+          echo "rebuiltDuringDeploy=false"
+          {
+            echo "## T03 organizer deploy request"
+            echo ""
+            echo "- artifact: \`$ARTIFACT_NAME\`"
+            echo "- workflowRun: \`$SOURCE_RUN_ID\`"
+            echo "- commit: \`$COMMIT_SHA\`"
+            echo "- rebuiltDuringDeploy: false"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Authorize deploy with private token (server-side only)
         env:
@@ -90,6 +125,7 @@ jobs:
           TEAM_SHA: ${{ steps.request.outputs.sha }}
           TEAM_BRANCH: ${{ steps.request.outputs.branch }}
           SOURCE_RUN_ID: ${{ steps.request.outputs.source_run_id }}
+          ARTIFACT_NAME: ${{ steps.request.outputs.artifact_name }}
         run: |
           set -euo pipefail
 
@@ -110,6 +146,8 @@ jobs:
                   "sha": os.environ["TEAM_SHA"],
                   "branch": os.environ["TEAM_BRANCH"],
                   "source_run_id": os.environ["SOURCE_RUN_ID"],
+                  "artifact": os.environ["ARTIFACT_NAME"],
+                  "workflowRun": os.environ["SOURCE_RUN_ID"],
               },
           }
 
@@ -124,4 +162,4 @@ jobs:
             "https://api.github.com/repos/${DEPLOYER_REPO}/dispatches" \
             --data @payload.json
 
-          echo "Requested organizer deployment for ${TEAM_REPO}@${TEAM_SHA}."
+          echo "Requested organizer deployment for ${TEAM_REPO}@${TEAM_SHA} artifact=${ARTIFACT_NAME}."

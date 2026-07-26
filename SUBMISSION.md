@@ -34,10 +34,10 @@ Use this section for short public notes and links. Full task instructions and ch
 
 | Task | PR | Evidence | Notes |
 | --- | --- | --- | --- |
-| T01 | [T01] Launch Provided Website | `/health`, `/status`, CI deploy request | Merged |
-| T02 | [T02] Connect Custom Domain | `/status` domain block, `domain.config.json`, HTTPS+HTTP+IP | A record beginners → 20.114.32.177; `domain.connected=true` |
-| T03 |  |  |  |
-| T04 | [T04] Rollback To Known-Good Release | Actions summary + `rollback-manifest` artifact | `.github/workflows/rollback.yml`; input `release_ref`; default `dry_run=true` |
+| T01 |  |  |  |
+| T02 |  |  |  |
+| T03 | [T03] Build Once Deploy Same Artifact | CI `site-dist-<sha>` + dry-run download; `/status.artifact` + `workflowRun`; `release-manifest-<sha>` | Deploy path does not run `npm run build` |
+| T04 |  |  |  |
 | T05 | [T05] Secret And Config Separation | `/status` config block, `.env.example`, CI masked secret | `PUBLIC_DEPLOY_LABEL` variable; `PRIVATE_DEPLOY_TOKEN` secret (names only in PR) |
 | T06 | [T06] CI Gate Before Deployment | `.github/workflows/ci.yml` Node 20 + `npm ci` + build + `site-dist-<sha>`; deploy gated on CI success | See Public Notes |
 | T07 | [T07] OpenWeather API Widget | Merged |  |
@@ -67,8 +67,7 @@ Use this section for short public notes and links. Full task instructions and ch
 
 ## Public Notes
 
-- T02: Domain evidence is in `/status` (`domain.connected`, assigned domain, A-record target) and `domain.config.json`. Verify HTTPS domain, plain HTTP domain/IP compatibility at `http://20.114.32.177`. No DNS portal credentials are committed.
-- T06: CI workflow (`.github/workflows/ci.yml`) runs on `pull_request` and `push` to `main`. It uses Node 20, `npm ci` from `team-site/package-lock.json`, `npm run build` in `team-site/`, and uploads `team-site/dist` as `site-dist-<sha>`. `Request Organizer Deploy` only continues when that CI workflow succeeds on `main`.
+z- T03: CI builds once and uploads immutable artifact `site-dist-${github.sha}`. The `dry-run-deploy` job downloads that exact artifact (no `npm run build`). `/status` exposes `artifact` and `workflowRun`. Organizer deploy request also downloads the same SHA-named artifact before dispatch.
 
 List anything judges should know without exposing credentials or private infrastructure details.
 

@@ -7,6 +7,13 @@ const repoRoot = join(siteRoot, '..');
 const publicDir = join(siteRoot, 'public');
 mkdirSync(publicDir, { recursive: true });
 
+const commit = process.env.GITHUB_SHA || process.env.VITE_COMMIT_SHA || 'local-dev';
+const workflowRun = String(
+  process.env.GITHUB_RUN_ID || process.env.VITE_RELEASE_ID || process.env.RELEASE_ID || 'local',
+);
+const artifact =
+  process.env.BUILD_ARTIFACT_NAME || `site-dist-${commit}`;
+
 const publicDeployLabel =
   process.env.PUBLIC_DEPLOY_LABEL ||
   process.env.VITE_PUBLIC_DEPLOY_LABEL ||
@@ -71,19 +78,14 @@ const contactEvidence = {
 };
 
 const status = {
-  team,
-  team_slug: process.env.TEAM_SLUG || 'beginners',
+  team: process.env.TEAM_NAME || 'BEGINNERS',
   commit,
   commit_short: commit.slice(0, 7),
-  release_id: String(releaseId),
-  deploy_time: deployTime,
-  public_url: publicUrl,
-  public_url_mode: publicUrlMode,
-  task: taskMarker,
-  marker: taskMarker,
-  domain: domainEvidence,
-  'domain.connected': domainConnected,
-  assignedDomain,
+  task: process.env.TASK_MARKER || 'T03',
+  marker: process.env.TASK_MARKER || 'T03',
+  // T03 organizer field names
+  artifact,
+  workflowRun,
   config: {
     publicDeployLabel,
     privateDeployTokenConfigured: privateTokenConfigured,
@@ -109,5 +111,5 @@ writeFileSync(join(publicDir, 'health'), 'ok\n', 'utf8');
 writeFileSync(join(publicDir, 'status'), `${JSON.stringify(status, null, 2)}\n`, 'utf8');
 writeFileSync(join(repoRoot, 'domain.config.json'), `${JSON.stringify(domainConfig, null, 2)}\n`, 'utf8');
 console.log(
-  `Wrote /health, /status, and domain.config.json for ${team} @ ${status.commit_short} (${taskMarker}, domain.connected=${domainConnected})`,
+  `Wrote /status artifact=${artifact} workflowRun=${workflowRun} commit=${status.commit_short}`,
 );
