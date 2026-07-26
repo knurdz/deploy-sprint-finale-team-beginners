@@ -103,6 +103,7 @@ const status = {
   contact: contactEvidence,
   'contact.provider': 'web3forms',
   'contact.configured': web3formsConfigured,
+};
 
 const domainConfig = {
   assignedDomain,
