@@ -5,16 +5,26 @@ import {
   web3formsConfigured,
   web3formsSubmitEndpoint,
 } from '../config/web3forms-runtime';
+import { turnstileSiteKeyConfigured } from '../config/turnstile-runtime';
+import { turnstileStatus } from '../config/turnstile';
+import { TurnstileWidget } from '../components/TurnstileWidget';
 
 export function ContactPage() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!web3formsConfigured || !web3formsAccessKey) {
       setStatus('error');
       setMessage('Contact is not configured in this build. Deploy with WEB3FORMS_ACCESS_KEY in GitHub Secrets.');
+      return;
+    }
+
+    if (!turnstileSiteKeyConfigured || !turnstileToken) {
+      setStatus('error');
+      setMessage('Complete the Cloudflare Turnstile check before sending.');
       return;
     }
 
@@ -33,6 +43,7 @@ export function ContactPage() {
           email: data.get('email'),
           subject: data.get('subject'),
           message: data.get('message'),
+          'cf-turnstile-response': turnstileToken,
         }),
       });
 
@@ -41,8 +52,9 @@ export function ContactPage() {
       }
 
       setStatus('sent');
-      setMessage('Thanks — your message was sent via Web3Forms.');
+      setMessage('Thanks — your message was sent via Web3Forms (Turnstile token attached).');
       form.reset();
+      setTurnstileToken('');
     } catch {
       setStatus('error');
       setMessage('Could not send the message. Try again later.');
@@ -63,7 +75,11 @@ export function ContactPage() {
         </div>
         <div className="sidebarPanel">
           <Mail size={18} />
-          <p>Contact form powered by Web3Forms. Access key is stored in GitHub Secret WEB3FORMS_ACCESS_KEY.</p>
+          <p>
+            Contact form powered by Web3Forms and protected by Cloudflare Turnstile (
+            {turnstileStatus.provider}). Access key and Turnstile secret stay in GitHub Secrets;
+            only the public site key is in the browser.
+          </p>
         </div>
         <a className="navLinks active" href="../index.html">
           ← Back to dashboard
@@ -96,6 +112,10 @@ export function ContactPage() {
               Message
               <textarea name="message" rows={5} required />
             </label>
+            <TurnstileWidget
+              onToken={(token) => setTurnstileToken(token)}
+              onExpire={() => setTurnstileToken('')}
+            />
             <button type="submit" className="contactSubmit" disabled={status === 'sending'}>
               <Send size={18} />
               {status === 'sending' ? 'Sending…' : 'Send message'}

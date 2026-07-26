@@ -52,30 +52,22 @@ Use this section for short public notes and links. Full task instructions and ch
 | T15 | [T15] Runtime Feature Flag | `/status` `featureFlags` + Insights UI | `FEATURE_SHOW_INSIGHTS` secret/var → `VITE_FEATURE_SHOW_INSIGHTS`; no hardcoded flag |
 | T16 | [T16] Resend Email Alerts | `/status` email + `/email/status.json` | Secret name only: `RESEND_API_KEY`; CI dry-run evidence |
 | T17 | [T17] Low-Downtime Release Strategy | `scripts/low-downtime-release.sh` + `low-downtime-release.yml` | Symlink `current` only after candidate health; keep previous on failure |
+| T17 | [T17] Low-Downtime Release Strategy | `low-downtime-release.yml` + `t17-low-downtime-<sha>` | Switch `current` only after health-check |
 | T18 |  | `/status` `container.image`, CI + deploy logs | `docs/container-deploy.md`; GHCR SHA tag + organizer deployer |
 | T19 |  |  |  |
 | T20 |  |  |  |
 | T21 |  | Workflow YAML + Actions queue evidence | `docs/workflow-safety.md`; `production-*` deploy concurrency |
 | T22 |  | `compose.yml`, `compose-deploy-<sha>`, `/status` `runtime=compose` | `docs/compose-runtime.md`; remote `.env` at deploy only |
-| T23 |  |  |  |
-| T24 |  |  |  |
-| T25 |  |  |  |
-| T26 |  |  |  |
-| T27 |  | Secret scan workflow + CI step | `docs/incidents/secret-leak-drill.md`; no `leaky-debug.yml` |
-| T28 |  |  |  |
-| T29 |  |  |  |
-| T30 |  | `/status` monitoring + `sentry-test.html` | `docs/sentry-monitoring.md`; CI Sentry release step |
-| T22 |  |  |  |
 | T23 | [T23] Release Evidence Manifest | `release-manifest.json` artifact + `/status.releaseManifest` | commit, artifact, workflowRun, deployedAt, taskMarkers |
+| T24 | [T24] Cloudflare Turnstile | `/contact` widget + `/status` turnstile + `/turnstile/status.json` | Secret name only: `TURNSTILE_SECRET_KEY`; site key public |
+| T25 |  |  |  |
 | T24 |  |  |  |
 | T25 | [T25] Hotfix Cherry-Pick Under Pressure | Cherry-pick `81849c4` from `task-assets/hotfix`; `TASK_ASSET.md`; metrics clamp | Focused PR only — no unrelated work |
 | T26 | [T26] Incident: Broken Deploy Recovery | `deploy-broken.yml` + `docs/incidents/broken-deploy-log.md` | Seeded `build` path → fix `team-site/dist`; rollback first if prod unhealthy |
-| T27 |  |  |  |
+| T27 |  | Secret scan workflow + CI step | `docs/incidents/secret-leak-drill.md`; no `leaky-debug.yml` |
 | T28 | [T28] Race-Safe Idempotent Deploy | `scripts/idempotent-deploy.sh` + deploy concurrency/lock; artifact `t28-idempotent-deploy-<sha>` | two-pass dry-run + lock busy proof |
-| T29 |  |  |  |
-| T28 |  |  |  |
 | T29 | [T29] Disaster Recovery From Actions Only | `.github/workflows/recover.yml` + `docs/recovery.md` | Actions-only restore; `dry_run` manifest; no manual VPS |
-| T30 |  |  |  |
+| T30 |  | `/status` monitoring + `sentry-test.html` | `docs/sentry-monitoring.md`; CI Sentry release step |
 
 ## Public Notes
 
@@ -169,6 +161,21 @@ List anything judges should know without exposing credentials or private infrast
 - Client marker: `team-site/src/config/emailAlerts.ts` (provider/secret name only; no key).
 - Verify: CI summary + `site-dist-<sha>` artifact contains redacted status; search repo/artifacts for no `re_` key values.
 
+### T24 Cloudflare Turnstile
+
+- Snippet adapted in `team-site/src/config/turnstile.ts` + server path `team-site/scripts/prepare-turnstile.mjs`.
+- Public widget key: `TURNSTILE_SITE_KEY` / `VITE_TURNSTILE_SITE_KEY` (Variable OK). Secret: GitHub Secret `TURNSTILE_SECRET_KEY` only — never a Vite-prefixed secret env.
+- Widget rendered on `/contact.html` (`TurnstileWidget`); submit requires `cf-turnstile-response` token.
+- CI dry-run verifies secret presence and writes `/turnstile/status.json` + `/status.turnstile` with `provider=cloudflare-turnstile`, `secretRedacted=true`, `allowedHostname`.
+- Verify: CI assert step + artifact; no Vite-prefixed Turnstile secret env in source/dist.
+
+### T28 race-safe idempotent deploy
+
+- Starter lock adapted in `scripts/idempotent-deploy.sh` (`mkdir` lock dir + `trap` cleanup).
+- Deploy workflow concurrency: `group: production-deploy-beginners`, `cancel-in-progress: false` (queue, don't cancel).
+- Retry-safe ops: create-or-reuse `releases/<sha>`, atomic switch of `current` symlink/dir.
+- Evidence: two dry-run passes in deploy job (pass 2 must log reuse) + lock-busy proof; artifact `t28-idempotent-deploy-<sha>`.
+- Verify: open deploy Actions run logs / download artifact; confirm second pass reuses the same target.
 
 ### T29 disaster recovery from Actions only
 
@@ -177,15 +184,8 @@ List anything judges should know without exposing credentials or private infrast
 - Recreates (in order): app directories → env placeholders → container/service config → release pointer (artifact + GHCR image) → service recreate → verify.
 - No-live: dry-run uploads `recovery-manifest-<run_id>` + `recovery-runtime/` (`manual_vps_repair: false`).
 - Live: `dry_run=false` requests organizer container redeploy for the confirmed SHA (Actions secrets only; no SSH).
-- Cite log: `Log line proving restore target: restore_target=<sha>`.
+- Starter bug: empty `restoreTarget` camelCase input; fixed to `restore_target`. Cite log: `Log line proving restore target: restore_target=<sha>`.
 - Judge answer: recreate directories, then env placeholders, then container config, then bind latest confirmed artifact/image, then start/redeploy service via Actions, then verify `/health` + `/status`.
-
-
-- Starter lock adapted in `scripts/idempotent-deploy.sh` (`mkdir` lock dir + `trap` cleanup).
-- Deploy workflow concurrency: `group: production-deploy-beginners`, `cancel-in-progress: false` (queue, don't cancel).
-- Retry-safe ops: create-or-reuse `releases/<sha>`, atomic switch of `current` symlink/dir.
-- Evidence: two dry-run passes in deploy job (pass 2 must log reuse) + lock-busy proof; artifact `t28-idempotent-deploy-<sha>`.
-- Verify: open deploy Actions run logs / download artifact; confirm second pass reuses the same target.
 
 ### T17 low-downtime release strategy
 

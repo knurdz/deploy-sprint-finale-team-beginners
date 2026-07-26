@@ -68,7 +68,9 @@ const defaultMarkers = [
   'T10',
   'T12',
   'T15',
+  'T16',
   'T23',
+  'T24',
 ];
 const taskMarkers = (process.env.COMPLETED_TASK_MARKERS || defaultMarkers.join(','))
   .split(',')
@@ -76,6 +78,9 @@ const taskMarkers = (process.env.COMPLETED_TASK_MARKERS || defaultMarkers.join('
   .filter(Boolean);
 if (!taskMarkers.includes('T23')) {
   taskMarkers.push('T23');
+}
+if (!taskMarkers.includes('T24')) {
+  taskMarkers.push('T24');
 }
 
 const releaseManifest = {
@@ -165,6 +170,51 @@ const emailEvidence = {
   mode: emailMode,
 };
 
+// T24: Cloudflare Turnstile readiness — never write secret key or response tokens.
+let turnstileConfigured =
+  process.env.TURNSTILE_CONFIGURED === 'true' ||
+  process.env.TURNSTILE_SECRET_KEY_CONFIGURED === 'true';
+let turnstileMode = process.env.TURNSTILE_VERIFY_MODE || 'dry-run';
+let turnstileAllowedHostname =
+  process.env.TURNSTILE_ALLOWED_HOSTNAME ||
+  process.env.ASSIGNED_DOMAIN ||
+  process.env.VITE_ASSIGNED_DOMAIN ||
+  'beginners.deploysprint-finals.knurdz.org';
+let turnstileSiteKeyConfigured =
+  process.env.TURNSTILE_SITE_KEY_CONFIGURED === 'true' ||
+  Boolean(process.env.TURNSTILE_SITE_KEY || process.env.VITE_TURNSTILE_SITE_KEY);
+const turnstileStatusPath = join(publicDir, 'turnstile', 'status.json');
+if (existsSync(turnstileStatusPath)) {
+  try {
+    const turnstileArtifact = JSON.parse(readFileSync(turnstileStatusPath, 'utf8'));
+    if (typeof turnstileArtifact.configured === 'boolean') {
+      turnstileConfigured = turnstileArtifact.configured;
+    }
+    if (typeof turnstileArtifact.mode === 'string') {
+      turnstileMode = turnstileArtifact.mode;
+    }
+    if (typeof turnstileArtifact.allowedHostname === 'string') {
+      turnstileAllowedHostname = turnstileArtifact.allowedHostname;
+    }
+    if (typeof turnstileArtifact.siteKeyConfigured === 'boolean') {
+      turnstileSiteKeyConfigured = turnstileArtifact.siteKeyConfigured;
+    }
+  } catch {
+    // Keep env-flag fallback if artifact is unreadable.
+  }
+}
+const turnstileEvidence = {
+  task: 'T24',
+  provider: 'cloudflare-turnstile',
+  configured: turnstileConfigured,
+  siteKeyConfigured: turnstileSiteKeyConfigured,
+  siteKeyPublic: true,
+  secretRedacted: true,
+  secretKeySecretName: 'TURNSTILE_SECRET_KEY',
+  allowedHostname: turnstileAllowedHostname,
+  mode: turnstileMode,
+};
+
 const status = {
   team,
   team_slug: process.env.TEAM_SLUG || 'beginners',
@@ -197,6 +247,9 @@ const status = {
   'email.provider': 'resend',
   'email.configured': emailConfigured,
 
+  turnstile: turnstileEvidence,
+  'turnstile.provider': 'cloudflare-turnstile',
+  'turnstile.configured': turnstileConfigured,
 };
 
 if (previewPrNumber && previewBasePath) {

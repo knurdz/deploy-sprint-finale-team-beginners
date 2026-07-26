@@ -7,9 +7,11 @@
     "dev": "vite",
     "test:release-readiness": "node scripts/check-release-readiness.mjs",
     "prepare-web3forms": "node scripts/prepare-web3forms.mjs",
+    "prepare-resend-email": "node scripts/prepare-resend-email.mjs",
+    "prepare-turnstile": "node scripts/prepare-turnstile.mjs",
     "prepare-sentry": "node scripts/prepare-sentry.mjs",
     "write-evidence": "node scripts/write-release-evidence.mjs",
-    "build": "npm run prepare-web3forms && npm run prepare-sentry && npm run write-evidence && tsc --noEmit && vite build",
+    "build": "npm run prepare-web3forms && npm run prepare-resend-email && npm run prepare-turnstile && npm run prepare-sentry && npm run write-evidence && tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test": "jest"

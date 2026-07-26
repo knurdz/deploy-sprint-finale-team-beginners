@@ -137,6 +137,27 @@ jobs:
           echo "configured=true" >> "$GITHUB_OUTPUT"
           echo "RESEND_API_KEY is configured for Resend (value redacted)."
 
+      - name: Verify TURNSTILE_SECRET_KEY secret
+        id: turnstile_secret
+        env:
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY || secrets.TURNSTILE_SITE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TURNSTILE_SECRET_KEY:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "TURNSTILE_SECRET_KEY is not configured."
+            exit 1
+          fi
+          if [ -z "${TURNSTILE_SITE_KEY:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "TURNSTILE_SITE_KEY is not configured (public site key required)."
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+          echo "site_key_configured=true" >> "$GITHUB_OUTPUT"
+          echo "TURNSTILE_SECRET_KEY is configured for Turnstile (value redacted)."
+
       - name: Prepare Resend email alert evidence
         id: resend_email
         env:
@@ -175,13 +196,19 @@ jobs:
           DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
           DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
           DOMAIN_CONNECTED: "true"
-          TASK_MARKER: T30
+
+          TASK_MARKER: T24
+          BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T14,T15,T16,T17,T18,T21,T22,T23,T24,T26,T27,T28,T29,T30
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          CONTAINER_IMAGE: ${{ steps.container.outputs.image }}
           COMPOSE_RUNTIME: "true"
           COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01' }}
           SERVICE_NAME: ${{ vars.SERVICE_NAME || 'deploy-sprint-team-01' }}
           RUNTIME_ENV_PATH: ${{ vars.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env' }}
-          APP_PORT: ${{ vars.APP_PORT || '8080' }}
           APP_IMAGE: ghcr.io/${{ github.repository }}/team-site:${{ github.sha }}
+
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret_main.outputs.configured || steps.deploy_secret_pr.outputs.configured }}
@@ -207,6 +234,14 @@ jobs:
           EMAIL_ALERT_MODE: ${{ vars.EMAIL_ALERT_MODE || 'dry-run' }}
           RESEND_CONFIGURED: ${{ steps.resend_secret.outputs.configured }}
           RESEND_API_KEY_CONFIGURED: ${{ steps.resend_secret.outputs.configured }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY || secrets.TURNSTILE_SITE_KEY }}
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY || secrets.TURNSTILE_SITE_KEY }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          TURNSTILE_VERIFY_MODE: ${{ vars.TURNSTILE_VERIFY_MODE || 'dry-run' }}
+          TURNSTILE_ALLOWED_HOSTNAME: ${{ vars.TURNSTILE_ALLOWED_HOSTNAME || vars.ASSIGNED_DOMAIN || 'beginners.deploysprint-finals.knurdz.org' }}
+          TURNSTILE_CONFIGURED: ${{ steps.turnstile_secret.outputs.configured }}
+          TURNSTILE_SECRET_KEY_CONFIGURED: ${{ steps.turnstile_secret.outputs.configured }}
+          TURNSTILE_SITE_KEY_CONFIGURED: ${{ steps.turnstile_secret.outputs.site_key_configured }}
         run: npm run build
         working-directory: team-site
 
@@ -216,8 +251,7 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           DEPLOY_TIME: ${{ github.run_started_at }}
           BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
-          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T15,T16,T18,T21,T23,T26
-          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T14,T15,T23
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T14,T15,T16,T17,T18,T21,T22,T23,T24,T26,T27,T28,T29,T30
         run: node team-site/scripts/write-release-manifest.mjs
 
       - name: Copy release manifest into dist
@@ -310,7 +344,48 @@ jobs:
           print("T16 email status evidence OK (redacted).")
           PY
 
-      - name: Build container image
+      - name: Assert Turnstile status evidence
+        run: |
+          set -euo pipefail
+          {
+            echo "## T24 Cloudflare Turnstile"
+            echo ""
+            echo "- Secret name: \`TURNSTILE_SECRET_KEY\` (value never logged)"
+            echo "- Site key: public widget key only (\`TURNSTILE_SITE_KEY\` / \`VITE_TURNSTILE_SITE_KEY\`)"
+            echo "- Provider: cloudflare-turnstile"
+            echo "- Configured: ${{ steps.turnstile_secret.outputs.configured }}"
+            echo "- secretRedacted: true"
+            echo "- Mode: \`${{ vars.TURNSTILE_VERIFY_MODE || 'dry-run' }}\` (CI/deploy-time siteverify path; secret never VITE_)"
+            echo "- Evidence: \`/status\` turnstile block + \`/turnstile/status.json\` in site-dist artifact"
+          } >> "$GITHUB_STEP_SUMMARY"
+          test -f team-site/dist/turnstile/status.json
+          test -f team-site/dist/status
+          # Fail only on real usage in app/build output — not docs saying "don't use Vite for the secret".
+          if grep -RInE 'VITE_TURNSTILE_SECRET_KEY[[:space:]]*[:=]|process\.env\.VITE_TURNSTILE_SECRET|import\.meta\.env\.VITE_TURNSTILE_SECRET' \
+            team-site/dist team-site/src team-site/scripts 2>/dev/null; then
+            echo "Found forbidden Vite-prefixed Turnstile secret usage."
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          status = json.load(open("team-site/dist/status", encoding="utf-8"))
+          turnstile = status.get("turnstile") or {}
+          assert turnstile.get("provider") == "cloudflare-turnstile", turnstile
+          assert turnstile.get("configured") is True, turnstile
+          assert turnstile.get("secretRedacted") is True, turnstile
+          assert turnstile.get("allowedHostname"), turnstile
+          assert status.get("turnstile.provider") == "cloudflare-turnstile"
+          assert status.get("turnstile.configured") is True
+          artifact = json.load(open("team-site/dist/turnstile/status.json", encoding="utf-8"))
+          assert artifact.get("provider") == "cloudflare-turnstile"
+          assert artifact.get("configured") is True
+          assert artifact.get("secretRedacted") is True
+          assert artifact.get("allowedHostname")
+          blob = json.dumps(status) + json.dumps(artifact)
+          assert "VITE_TURNSTILE_SECRET" not in blob
+          print("T24 Turnstile status evidence OK (redacted).")
+          PY
+
       - name: Build production Docker image (T14)
         id: docker_build
         env:
@@ -427,12 +502,13 @@ jobs:
             echo "- Build: \`npm run build\` in \`team-site/\`"
             echo "- Artifact: \`site-dist-${GITHUB_SHA}\` from \`team-site/dist\`"
             echo "- Feature flag: FEATURE_SHOW_INSIGHTS (value redacted; boolean only in /status)"
+            echo "- Email: RESEND_API_KEY secret (redacted; /status + /email/status.json)"
+            echo "- Turnstile: TURNSTILE_SECRET_KEY secret (redacted; /status + /turnstile/status.json)"
             echo "- T21: PR runs skip deploy secrets; permissions contents:read + actions:write + packages:write"
             echo "- Dockerfile: \`team-site/Dockerfile\` (build + nginx runtime)"
             echo "- Image tag: \`${{ steps.container.outputs.image }}\`"
             echo "- Image id: \`${{ steps.docker_build.outputs.image_id }}\`"
             echo "- Docker evidence artifact: \`docker-image-evidence-${GITHUB_SHA}\`"
-            echo "- T21: PR runs skip deploy secrets; permissions contents:read + actions:write (artifacts)"
             echo "- T22: \`docker compose config\` validated; artifact \`compose-deploy-${GITHUB_SHA}\`"
             echo "- T30: Sentry SDK + release \`${GITHUB_SHA}\` (secrets redacted)"
             echo "- Container image: \`${{ steps.container.outputs.image }}\`"
@@ -444,5 +520,11 @@ jobs:
             echo "- Artifact: \`release-manifest-${GITHUB_SHA}\`"
             echo "- Also in \`/status.releaseManifest\` and \`/release-manifest.json\`"
             echo "- Fields: commit, artifact, workflowRun, deployedAt, taskMarkers"
+            echo ""
+            echo "## T24 Cloudflare Turnstile"
+            echo "- Secret name: \`TURNSTILE_SECRET_KEY\` (server/CI only; never Vite client env)"
+            echo "- Public site key: \`TURNSTILE_SITE_KEY\` / \`VITE_TURNSTILE_SITE_KEY\`"
+            echo "- Evidence: \`/status.turnstile\` + \`/turnstile/status.json\` (provider=cloudflare-turnstile, secretRedacted=true)"
+            echo "- Contact widget: \`TurnstileWidget\` on \`/contact.html\`"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "CI gate passed for commit ${GITHUB_SHA}."
