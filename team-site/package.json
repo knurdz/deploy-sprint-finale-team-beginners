@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prepare-web3forms": "node scripts/prepare-web3forms.mjs",
     "write-evidence": "node scripts/write-release-evidence.mjs",
-    "build": "npm run write-evidence && tsc --noEmit && vite build",
+    "build": "npm run prepare-web3forms && npm run write-evidence && tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
   },

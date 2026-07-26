@@ -64,6 +64,16 @@ const domainEvidence = {
   verifiedAt: verificationTime,
 };
 
+const web3formsConfigured =
+  process.env.WEB3FORMS_CONFIGURED === 'true' ||
+  process.env.WEB3FORMS_ACCESS_KEY_CONFIGURED === 'true';
+
+const contactEvidence = {
+  provider: 'web3forms',
+  configured: web3formsConfigured,
+  accessKeyStoredInSecret: true,
+};
+
 const status = {
   team,
   team_slug: process.env.TEAM_SLUG || 'beginners',
@@ -83,6 +93,9 @@ const status = {
     privateDeployTokenConfigured: privateTokenConfigured,
     secretsRedacted: true,
   },
+  contact: contactEvidence,
+  'contact.provider': 'web3forms',
+  'contact.configured': web3formsConfigured,
 };
 
 if (previewPrNumber && previewBasePath) {

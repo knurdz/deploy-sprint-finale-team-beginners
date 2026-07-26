@@ -1,0 +1,6 @@
+{
+  "provider": "web3forms",
+  "configured": false,
+  "endpoint": "https://api.web3forms.com/submit",
+  "accessKeyStoredInSecret": true
+}
