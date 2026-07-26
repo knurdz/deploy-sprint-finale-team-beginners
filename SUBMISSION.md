@@ -140,7 +140,7 @@ List anything judges should know without exposing credentials or private infrast
 - Recreates (in order): app directories → env placeholders → container/service config → release pointer (artifact + GHCR image) → service recreate → verify.
 - No-live: dry-run uploads `recovery-manifest-<run_id>` + `recovery-runtime/` (`manual_vps_repair: false`).
 - Live: `dry_run=false` requests organizer container redeploy for the confirmed SHA (Actions secrets only; no SSH).
-- Starter bug: empty `restoreTarget` camelCase input; fixed to `restore_target`. Cite log: `Log line proving restore target: restore_target=<sha>`.
+- Cite log: `Log line proving restore target: restore_target=<sha>`.
 - Judge answer: recreate directories, then env placeholders, then container config, then bind latest confirmed artifact/image, then start/redeploy service via Actions, then verify `/health` + `/status`.
 
 
