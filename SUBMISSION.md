@@ -35,7 +35,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T03 |  |  |  |
 | T04 |  |  |  |
 | T05 | [T05] Secret And Config Separation | `/status` config block, `.env.example`, CI masked secret | `PUBLIC_DEPLOY_LABEL` variable; `PRIVATE_DEPLOY_TOKEN` secret (names only in PR) |
-| T06 |  |  |  |
+| T06 | [T06] CI Gate Before Deployment | `.github/workflows/ci.yml`, artifact `site-dist-<sha>` | Deploy runs only after CI success via workflow_run |
 | T07 |  |  |  |
 | T08 |  |  |  |
 | T09 |  |  |  |
