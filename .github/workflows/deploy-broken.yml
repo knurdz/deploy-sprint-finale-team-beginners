@@ -1,8 +1,6 @@
 name: Broken deploy rehearsal
 
-# T26: recover from seeded broken deploy (uploaded `build` instead of `dist`).
-# AI-REVIEW-MARKER: participant must manually remove this marker
-# PR-AGENT-MARKER: participant must manually remove this marker
+
 
 on:
   workflow_dispatch:
