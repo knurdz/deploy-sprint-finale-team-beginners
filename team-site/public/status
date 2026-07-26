@@ -1,0 +1,11 @@
+{
+  "team": "BEGINNERS",
+  "team_slug": "beginners",
+  "commit": "pending-ci-build",
+  "commit_short": "pending",
+  "release_id": "pending",
+  "deploy_time": "pending-ci-build",
+  "public_url": "http://20.114.32.177",
+  "task": "T01",
+  "marker": "T01"
+}

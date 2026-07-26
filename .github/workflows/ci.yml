@@ -26,7 +26,17 @@ jobs:
 
       - name: Build
         env:
+          TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
+          TEAM_SLUG: ${{ vars.TEAM_SLUG || 'beginners' }}
+          RELEASE_ID: ${{ github.run_id }}
+          DEPLOY_TIME: ${{ github.run_started_at }}
+          PUBLIC_URL: ${{ vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+          IP_PUBLIC_URL: ${{ vars.IP_PUBLIC_URL }}
+          TASK_MARKER: T01
           VITE_PUBLIC_URL: ${{ vars.PUBLIC_URL || vars.DOMAIN_PUBLIC_URL || secrets.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+          VITE_TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
+          VITE_COMMIT_SHA: ${{ github.sha }}
+          VITE_RELEASE_ID: ${{ github.run_id }}
         run: npm run build
         working-directory: team-site
 
