@@ -63,6 +63,13 @@ const featureFlags = {
   valueRedacted: true,
 };
 
+const containerName = process.env.CONTAINER_NAME || 'deploy-sprint-team-01';
+const appPort = process.env.APP_PORT || '8080';
+const containerImageExplicit =
+  process.env.CONTAINER_IMAGE || process.env.IMAGE_TAG || process.env.VITE_CONTAINER_IMAGE;
+const containerImage =
+  containerImageExplicit || `deploy-sprint/team-site:${commit}`;
+
 const domainEvidence = {
   connected: domainConnected,
   assignedDomain,
@@ -150,6 +157,17 @@ if (previewPrNumber && previewBasePath) {
     productionStatusMustNotChange: true,
   };
   status.previewUrl = previewUrl;
+}
+
+if (taskMarker === 'T18' || containerImageExplicit) {
+  status.container = {
+    name: containerName,
+    image: containerImage,
+    imageTag: containerImage.includes(':') ? containerImage.split(':').pop() : commit,
+    appPort: Number(appPort),
+    commit,
+  };
+  status.image = containerImage;
 }
 
 const domainConfig = {
