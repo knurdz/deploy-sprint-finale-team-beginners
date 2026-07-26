@@ -58,7 +58,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T21 |  |  |  |
 | T22 |  |  |  |
 | T23 | [T23] Release Evidence Manifest | `release-manifest.json` artifact + `/status.releaseManifest` | commit, artifact, workflowRun, deployedAt, taskMarkers |
-| T24 |  |  |  |
+| T24 | [T24] Cloudflare Turnstile | `/contact` widget + `/status` turnstile + `/turnstile/status.json` | Secret name only: `TURNSTILE_SECRET_KEY`; site key public |
 | T25 |  |  |  |
 | T26 |  |  |  |
 | T27 |  |  |  |
@@ -117,4 +117,12 @@ List anything judges should know without exposing credentials or private infrast
 - Evidence: `/status` `email.provider=resend`, `email.configured=true`, `secretRedacted=true` plus `/email/status.json`.
 - Client marker: `team-site/src/config/emailAlerts.ts` (provider/secret name only; no key).
 - Verify: CI summary + `site-dist-<sha>` artifact contains redacted status; search repo/artifacts for no `re_` key values.
+
+### T24 Cloudflare Turnstile
+
+- Snippet adapted in `team-site/src/config/turnstile.ts` + server path `team-site/scripts/prepare-turnstile.mjs`.
+- Public widget key: `TURNSTILE_SITE_KEY` / `VITE_TURNSTILE_SITE_KEY` (Variable OK). Secret: GitHub Secret `TURNSTILE_SECRET_KEY` only — never `VITE_TURNSTILE_SECRET_KEY`.
+- Widget rendered on `/contact.html` (`TurnstileWidget`); submit requires `cf-turnstile-response` token.
+- CI dry-run verifies secret presence and writes `/turnstile/status.json` + `/status.turnstile` with `provider=cloudflare-turnstile`, `secretRedacted=true`, `allowedHostname`.
+- Verify: CI assert step + artifact; `grep -R VITE_TURNSTILE_SECRET` must be empty.
 

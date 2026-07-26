@@ -434,6 +434,18 @@ h3 {
   color: var(--text);
 }
 
+.turnstileWidget {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.turnstileHint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted, #6b7280);
+}
+
 .contactSubmit {
   display: inline-flex;
   align-items: center;
