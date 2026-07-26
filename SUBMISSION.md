@@ -13,7 +13,7 @@ Complete this file on `main` as tasks are completed. Do not paste secrets, priva
 ## Release Evidence
 
 - Current production commit:
-- Current artifact/image identifier: `site-dist-<sha>`
+- Current artifact/image identifier: `site-dist-<sha>` and `ghcr.io/knurdz/deploy-sprint-finale-team-beginners/team-site:<sha>`
 - Current deployment workflow run:
 - Current release manifest path or URL: `/release-manifest.json` and Actions artifact `release-manifest-<sha>`
 - Notes on live evidence or fallback evidence:
@@ -48,12 +48,12 @@ Use this section for short public notes and links. Full task instructions and ch
 | T11 |  |  |  |
 | T12 | [T12] Fast Dependency Pipeline | CI summary: cache-hit + npm ci + audit | `setup-node` cache keyed on `team-site/package-lock.json`; `npm ci` always runs |
 | T13 |  |  |  |
-| T14 |  |  |  |
+| T14 | (see T18) | `team-site/Dockerfile` multi-stage build | Production image shape included with T18 container deploy |
 | T15 | [T15] Runtime Feature Flag | `/status` `featureFlags` + Insights UI | `FEATURE_SHOW_INSIGHTS` secret/var → `VITE_FEATURE_SHOW_INSIGHTS`; no hardcoded flag |
 | T16 | [T16] Resend Email Alerts | `/status` email + `/email/status.json` | Secret name only: `RESEND_API_KEY`; CI dry-run evidence |
 | T17 |  |  |  |
-| T18 |  |  |  |
-| T19 | [T19] Post-Deploy Smoke Tests | `.github/workflows/deploy.yml` `smoke-test` job; `/` `/health` `/status` `/contact.html` | Live + fallback modes; fails workflow on mismatch |
+| T18 |  | `/status` `container.image`, CI + deploy logs | `docs/container-deploy.md`; GHCR SHA tag + organizer deployer |
+| T19 |  |  |  |
 | T20 |  |  |  |
 | T21 |  |  |  |
 | T22 |  |  |  |
@@ -71,6 +71,7 @@ Use this section for short public notes and links. Full task instructions and ch
 - T02: Domain evidence is in `/status` (`domain.connected`, assigned domain, A-record target) and `domain.config.json`. Verify HTTPS domain, plain HTTP domain/IP compatibility at `http://20.114.32.177`. No DNS portal credentials are committed.
 - T09: Conflicted file was `team-site/src/data/deadlines.ts`. Rule: keep both useful outcomes — main's `repo-setup-checkpoint` card and organizer `merge-conflict-lab` card from `task-assets/conflict-merge`. Verify with a source search for both ids and zero `<<<<<<<` / `=======` / `>>>>>>>` markers, then `npm run build` in `team-site/`.
 - T06: CI workflow (`.github/workflows/ci.yml`) runs on `pull_request` and `push` to `main`. It uses Node 20, `npm ci` from `team-site/package-lock.json`, `npm run build` in `team-site/`, and uploads `team-site/dist` as `site-dist-<sha>`. `Request Organizer Deploy` only continues when that CI workflow succeeds on `main`.
+- T18: CI also builds/pushes `ghcr.io/.../team-site:<sha>`, writes `container-deploy-<sha>` manifest artifact, and deploy requests include `deploy_mode: container` for the organizer deployer. See `docs/container-deploy.md`.
 
 List anything judges should know without exposing credentials or private infrastructure details.
 

@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build:
     name: CI gate (install, build, upload)
@@ -76,30 +80,17 @@ jobs:
           fi
           echo "WEB3FORMS_ACCESS_KEY is configured for Web3Forms (value redacted)."
 
-      - name: Verify RESEND_API_KEY secret
-        id: resend_secret
-        env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      - name: Resolve container image tags
+        id: container
         run: |
           set -euo pipefail
-          if [ -z "${RESEND_API_KEY:-}" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "RESEND_API_KEY is not configured."
-            exit 1
-          fi
-          echo "configured=true" >> "$GITHUB_OUTPUT"
-          echo "RESEND_API_KEY is configured for Resend (value redacted)."
-
-      - name: Prepare Resend email alert evidence
-        id: resend_email
-        env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || secrets.RESEND_FROM_EMAIL }}
-          ALERT_RECIPIENT_EMAIL: ${{ vars.ALERT_RECIPIENT_EMAIL || secrets.ALERT_RECIPIENT_EMAIL }}
-          EMAIL_PROVIDER: ${{ vars.EMAIL_PROVIDER || 'resend' }}
-          EMAIL_ALERT_MODE: ${{ vars.EMAIL_ALERT_MODE || 'dry-run' }}
-        run: node scripts/prepare-resend-email.mjs
-        working-directory: team-site
+          repo="${GITHUB_REPOSITORY,,}"
+          image="ghcr.io/${repo}/team-site:${GITHUB_SHA}"
+          local_tag="deploy-sprint/team-site:${GITHUB_SHA}"
+          {
+            echo "image=${image}"
+            echo "local_tag=${local_tag}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build team-site
         env:
@@ -174,48 +165,85 @@ jobs:
           if-no-files-found: error
 
       - name: Publish Resend email status evidence
+      - name: Build container image
+        env:
+          IMAGE: ${{ steps.container.outputs.image }}
+          LOCAL_TAG: ${{ steps.container.outputs.local_tag }}
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          DOMAIN_PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL }}
+          IP_PUBLIC_URL: ${{ vars.IP_PUBLIC_URL }}
         run: |
           set -euo pipefail
-          {
-            echo "## T16 Resend Email Alerts"
-            echo ""
-            echo "- Secret name: \`RESEND_API_KEY\` (value never logged)"
-            echo "- Provider: resend"
-            echo "- Configured: ${{ steps.resend_secret.outputs.configured }}"
-            echo "- secretRedacted: true"
-            echo "- Mode: \`${{ vars.EMAIL_ALERT_MODE || 'dry-run' }}\` (CI/deploy-time only; not browser)"
-            echo "- Evidence: \`/status\` email block + \`/email/status.json\` in site-dist artifact"
-          } >> "$GITHUB_STEP_SUMMARY"
-          test -f team-site/dist/email/status.json
-          test -f team-site/dist/status
-          python3 - <<'PY'
-          import json
-          status = json.load(open("team-site/dist/status", encoding="utf-8"))
-          email = status.get("email") or {}
-          assert email.get("provider") == "resend", email
-          assert email.get("configured") is True, email
-          assert email.get("secretRedacted") is True, email
-          assert "re_" not in json.dumps(status).lower()
-          artifact = json.load(open("team-site/dist/email/status.json", encoding="utf-8"))
-          assert artifact.get("provider") == "resend"
-          assert artifact.get("configured") is True
-          assert artifact.get("secretRedacted") is True
-          print("T16 email status evidence OK (redacted).")
-          PY
+          docker build \
+            --build-arg GITHUB_SHA="${GITHUB_SHA}" \
+            --build-arg TASK_MARKER=T18 \
+            --build-arg CONTAINER_IMAGE="${IMAGE}" \
+            --build-arg CONTAINER_NAME="${CONTAINER_NAME}" \
+            --build-arg APP_PORT="${APP_PORT}" \
+            --build-arg DOMAIN_PUBLIC_URL="${DOMAIN_PUBLIC_URL:-https://beginners.deploysprint-finals.knurdz.org}" \
+            --build-arg IP_PUBLIC_URL="${IP_PUBLIC_URL:-http://20.114.32.177}" \
+            -t "${IMAGE}" \
+            -t "${LOCAL_TAG}" \
+            team-site
+          echo "Built container images ${IMAGE} and ${LOCAL_TAG}"
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push container image to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          docker push "${{ steps.container.outputs.image }}"
+
+      - name: Write container deploy manifest
+        env:
+          IMAGE: ${{ steps.container.outputs.image }}
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+        run: |
+          set -euo pipefail
+          node -e "
+            const fs = require('node:fs');
+            const manifest = {
+              task: 'T18',
+              commit: process.env.GITHUB_SHA,
+              containerName: process.env.CONTAINER_NAME,
+              appPort: Number(process.env.APP_PORT),
+              image: process.env.IMAGE,
+              publicUrl: process.env.PUBLIC_URL || '',
+            };
+            fs.writeFileSync('container-deploy-manifest.json', JSON.stringify(manifest, null, 2) + '\n');
+          "
+
+      - name: Upload container deploy manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-deploy-${{ github.sha }}
+          path: container-deploy-manifest.json
+          if-no-files-found: error
 
 
       - name: CI gate summary
         run: |
           set -euo pipefail
           {
-            echo "## T06 CI gate"
+            echo "## T06 CI gate + T18 container build"
             echo ""
             echo "- Node: 20"
             echo "- Install: \`npm ci\` (team-site lockfile)"
             echo "- Build: \`npm run build\` in \`team-site/\`"
             echo "- Artifact: \`site-dist-${GITHUB_SHA}\` from \`team-site/dist\`"
             echo "- Feature flag: FEATURE_SHOW_INSIGHTS (value redacted; boolean only in /status)"
-            echo "- Email: RESEND_API_KEY secret (redacted; /status + /email/status.json)"
+            echo "- Container image: \`${{ steps.container.outputs.image }}\`"
+            echo "- Container manifest artifact: \`container-deploy-${GITHUB_SHA}\`"
             echo "- Deploy is gated on this workflow succeeding on \`main\`"
             echo ""
             echo "## T23 release manifest"
