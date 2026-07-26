@@ -1,28 +1,36 @@
 {
-  "name": "deploy-sprint-team-website",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "test:release-readiness": "node scripts/check-release-readiness.mjs",
-    "prepare-web3forms": "node scripts/prepare-web3forms.mjs",
-    "write-evidence": "node scripts/write-release-evidence.mjs",
-    "build": "npm run prepare-web3forms && npm run write-evidence && tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "lint": "tsc --noEmit",
-    "test": "jest"
+  "team": "BEGINNERS",
+  "team_slug": "beginners",
+  "commit": "local-dev",
+  "commit_short": "local-d",
+  "release_id": "local-1785053381022",
+  "deploy_time": "2026-07-26T08:09:41.023Z",
+  "public_url": "https://beginners.deploysprint-finals.knurdz.org",
+  "public_url_mode": "domain",
+  "task": "T02",
+  "marker": "T02",
+  "domain": {
+    "connected": true,
+    "assignedDomain": "beginners.deploysprint-finals.knurdz.org",
+    "recordType": "A",
+    "recordName": "beginners",
+    "recordTarget": "20.114.32.177",
+    "domainPublicUrl": "https://beginners.deploysprint-finals.knurdz.org",
+    "ipPublicUrl": "http://20.114.32.177",
+    "verifiedAt": "2026-07-26T08:09:41.023Z"
   },
-  "dependencies": {
-    "lucide-react": "^1.23.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+  "domain.connected": true,
+  "assignedDomain": "beginners.deploysprint-finals.knurdz.org",
+  "config": {
+    "publicDeployLabel": "unset-public-label",
+    "privateDeployTokenConfigured": false,
+    "secretsRedacted": true
   },
-  "devDependencies": {
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.3",
-    "typescript": "^6.0.3",
-    "vite": "^8.1.3"
-  }
+  "contact": {
+    "provider": "web3forms",
+    "configured": false,
+    "accessKeyStoredInSecret": true
+  },
+  "contact.provider": "web3forms",
+  "contact.configured": false
 }
