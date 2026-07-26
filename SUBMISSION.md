@@ -63,7 +63,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T26 | [T26] Incident: Broken Deploy Recovery | `deploy-broken.yml` + `docs/incidents/broken-deploy-log.md` | Seeded `build` path → fix `team-site/dist`; rollback first if prod unhealthy |
 | T27 |  |  |  |
 | T28 |  |  |  |
-| T29 |  |  |  |
+| T29 | [T29] Disaster Recovery From Actions Only | `.github/workflows/recover.yml` + `docs/recovery.md` | Actions-only restore; `dry_run` manifest; no manual VPS |
 | T30 |  |  |  |
 
 ## Public Notes
@@ -132,4 +132,15 @@ List anything judges should know without exposing credentials or private infrast
 - Evidence: `/status` `email.provider=resend`, `email.configured=true`, `secretRedacted=true` plus `/email/status.json`.
 - Client marker: `team-site/src/config/emailAlerts.ts` (provider/secret name only; no key).
 - Verify: CI summary + `site-dist-<sha>` artifact contains redacted status; search repo/artifacts for no `re_` key values.
+
+### T29 disaster recovery from Actions only
+
+- Workflow: `.github/workflows/recover.yml` (`workflow_dispatch` inputs `restore_target`, `dry_run` default `true`).
+- Runbook: `docs/recovery.md`.
+- Recreates (in order): app directories → env placeholders → container/service config → release pointer (artifact + GHCR image) → service recreate → verify.
+- No-live: dry-run uploads `recovery-manifest-<run_id>` + `recovery-runtime/` (`manual_vps_repair: false`).
+- Live: `dry_run=false` requests organizer container redeploy for the confirmed SHA (Actions secrets only; no SSH).
+- Starter bug: empty `restoreTarget` camelCase input; fixed to `restore_target`. Cite log: `Log line proving restore target: restore_target=<sha>`.
+- Judge answer: recreate directories, then env placeholders, then container config, then bind latest confirmed artifact/image, then start/redeploy service via Actions, then verify `/health` + `/status`.
+
 
