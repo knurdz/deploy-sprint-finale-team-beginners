@@ -15,12 +15,13 @@ Complete this file on `main` as tasks are completed. Do not paste secrets, priva
 - Current production commit:
 - Current artifact/image identifier: `site-dist-<sha>`
 - Current deployment workflow run:
-- Current release manifest path or URL: https://beginners.deploysprint-finals.knurdz.org/status
+- Current release manifest path or URL: `/release-manifest.json` and Actions artifact `release-manifest-<sha>`
 - Notes on live evidence or fallback evidence:
   - HTTPS domain: https://beginners.deploysprint-finals.knurdz.org
   - HTTP domain compatibility and raw IP: http://20.114.32.177
   - `/status` must show `domain.connected=true` and assigned domain fields
   - DNS A record: `beginners` → `20.114.32.177`
+  - T23: `release-manifest.json` maps commit SHA to `site-dist-<sha>` and workflow run ID
 
 ## Score Summary
 
@@ -56,7 +57,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T20 |  |  |  |
 | T21 |  |  |  |
 | T22 |  |  |  |
-| T23 |  |  |  |
+| T23 | [T23] Release Evidence Manifest | `release-manifest.json` artifact + `/status.releaseManifest` | commit, artifact, workflowRun, deployedAt, taskMarkers |
 | T24 |  |  |  |
 | T25 |  |  |  |
 | T26 |  |  |  |
@@ -97,3 +98,11 @@ List anything judges should know without exposing credentials or private infrast
 - Verify off: set secret/var to `false`, rebuild; panel hidden; status `showInsights: false`.
 - Verify on: set to `true`, rebuild; panel visible; status `showInsights: true`.
 - Incident disable: set `FEATURE_SHOW_INSIGHTS=false` and redeploy (no source change).
+
+### T23 release evidence manifest
+
+- Starter adapted to `team-site/scripts/write-release-manifest.mjs` (also written during `write-release-evidence.mjs`).
+- CI generates `release-manifest.json` and uploads artifact `release-manifest-<sha>`.
+- Manifest fields: `task`, `commit`, `artifact` (`site-dist-<sha>`), `workflowRun`, `deployedAt`/`deployTime`, `taskMarkers`, `secretsRedacted`.
+- Safe exposure: `/status.releaseManifest` and `/release-manifest.json` in the dist artifact.
+- Verify: download Actions artifact or open `/release-manifest.json` and confirm `commit` matches the scored SHA.

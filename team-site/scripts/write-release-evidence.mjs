@@ -47,11 +47,48 @@ const publicUrl =
     ? domainPublicUrl
     : process.env.PUBLIC_URL || ipPublicUrl || process.env.VITE_PUBLIC_URL || ipPublicUrl;
 
-const taskMarker = process.env.TASK_MARKER || 'T02';
+const taskMarker = process.env.TASK_MARKER || 'T23';
 const previewPrNumber = process.env.PREVIEW_PR_NUMBER;
 const previewBasePath =
   process.env.PREVIEW_BASE_PATH ||
   (previewPrNumber ? `/previews/pr-${previewPrNumber}` : undefined);
+
+const artifactName =
+  process.env.BUILD_ARTIFACT_NAME || `site-dist-${commit}`;
+const workflowRunId = String(releaseId);
+
+const defaultMarkers = [
+  'T01',
+  'T02',
+  'T04',
+  'T05',
+  'T06',
+  'T07',
+  'T09',
+  'T10',
+  'T12',
+  'T15',
+  'T23',
+];
+const taskMarkers = (process.env.COMPLETED_TASK_MARKERS || defaultMarkers.join(','))
+  .split(',')
+  .map((t) => t.trim())
+  .filter(Boolean);
+if (!taskMarkers.includes('T23')) {
+  taskMarkers.push('T23');
+}
+
+const releaseManifest = {
+  task: 'T23',
+  commit,
+  commit_short: commit.slice(0, 7),
+  artifact: artifactName,
+  workflowRun: workflowRunId,
+  deployedAt: deployTime,
+  deployTime,
+  taskMarkers,
+  secretsRedacted: true,
+};
 
 // T15: boolean only — never write the raw secret/string beyond true/false.
 const showInsights =
@@ -107,6 +144,9 @@ const status = {
   contact: contactEvidence,
   'contact.provider': 'web3forms',
   'contact.configured': web3formsConfigured,
+  releaseManifest,
+  artifact: artifactName,
+  workflowRun: workflowRunId,
 };
 
 if (previewPrNumber && previewBasePath) {
@@ -133,7 +173,9 @@ const domainConfig = {
 
 writeFileSync(join(publicDir, 'health'), 'ok\n', 'utf8');
 writeFileSync(join(publicDir, 'status'), `${JSON.stringify(status, null, 2)}\n`, 'utf8');
+writeFileSync(join(publicDir, 'release-manifest.json'), `${JSON.stringify(releaseManifest, null, 2)}\n`, 'utf8');
 writeFileSync(join(repoRoot, 'domain.config.json'), `${JSON.stringify(domainConfig, null, 2)}\n`, 'utf8');
+writeFileSync(join(repoRoot, 'release-manifest.json'), `${JSON.stringify(releaseManifest, null, 2)}\n`, 'utf8');
 console.log(
-  `Wrote /health, /status, and domain.config.json for ${team} @ ${status.commit_short} (${taskMarker}, domain.connected=${domainConnected})`,
+  `Wrote /health, /status, release-manifest.json, and domain.config.json for ${team} @ ${status.commit_short} (${taskMarker}, domain.connected=${domainConnected}, artifact=${artifactName})`,
 );

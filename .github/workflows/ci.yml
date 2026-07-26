@@ -91,7 +91,9 @@ jobs:
           DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
           DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
           DOMAIN_CONNECTED: "true"
-          TASK_MARKER: T15
+          TASK_MARKER: T23
+          BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T15,T23
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret.outputs.configured }}
@@ -106,11 +108,33 @@ jobs:
         run: npm run build
         working-directory: team-site
 
+      - name: Generate release manifest (T23)
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          DEPLOY_TIME: ${{ github.run_started_at }}
+          BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T15,T23
+        run: node team-site/scripts/write-release-manifest.mjs
+
+      - name: Copy release manifest into dist
+        run: |
+          set -euo pipefail
+          cp release-manifest.json team-site/dist/release-manifest.json
+          test -f team-site/dist/release-manifest.json
+
       - name: Upload team-site/dist artifact
         uses: actions/upload-artifact@v4
         with:
           name: site-dist-${{ github.sha }}
           path: team-site/dist
+          if-no-files-found: error
+
+      - name: Upload release manifest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ github.sha }}
+          path: release-manifest.json
           if-no-files-found: error
 
       - name: CI gate summary
@@ -125,5 +149,11 @@ jobs:
             echo "- Artifact: \`site-dist-${GITHUB_SHA}\` from \`team-site/dist\`"
             echo "- Feature flag: FEATURE_SHOW_INSIGHTS (value redacted; boolean only in /status)"
             echo "- Deploy is gated on this workflow succeeding on \`main\`"
+            echo ""
+            echo "## T23 release manifest"
+            echo "- File: \`release-manifest.json\`"
+            echo "- Artifact: \`release-manifest-${GITHUB_SHA}\`"
+            echo "- Also in \`/status.releaseManifest\` and \`/release-manifest.json\`"
+            echo "- Fields: commit, artifact, workflowRun, deployedAt, taskMarkers"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "CI gate passed for commit ${GITHUB_SHA}."
