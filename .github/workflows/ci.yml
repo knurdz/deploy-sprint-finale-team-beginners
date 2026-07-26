@@ -8,13 +8,18 @@ on:
 
 jobs:
   build:
+    name: CI gate (install, build, upload)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+<<<<<<< HEAD
       - name: Setup Node
         id: setup_node
+=======
+      - name: Setup Node 20
+>>>>>>> origin/main
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -36,10 +41,11 @@ jobs:
             exit 1
           fi
 
-      - name: Install dependencies
+      - name: Install from team-site lockfile
         run: npm ci
         working-directory: team-site
 
+<<<<<<< HEAD
       - name: Dependency cache and audit summary
         working-directory: team-site
         run: |
@@ -59,6 +65,9 @@ jobs:
           echo "Cache hit=${{ steps.setup_node.outputs.cache-hit }}; npm ci completed; audit exit=${audit_code}"
 
       - name: Build
+=======
+      - name: Build team-site
+>>>>>>> origin/main
         env:
           TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
           TEAM_SLUG: ${{ vars.TEAM_SLUG || 'beginners' }}
@@ -73,7 +82,7 @@ jobs:
           DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
           DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
           DOMAIN_CONNECTED: "true"
-          TASK_MARKER: T02
+          TASK_MARKER: T06
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret.outputs.configured }}
@@ -84,8 +93,23 @@ jobs:
         run: npm run build
         working-directory: team-site
 
-      - name: Upload dist artifact
+      - name: Upload team-site/dist artifact
         uses: actions/upload-artifact@v4
         with:
           name: site-dist-${{ github.sha }}
           path: team-site/dist
+          if-no-files-found: error
+
+      - name: CI gate summary
+        run: |
+          set -euo pipefail
+          {
+            echo "## T06 CI gate"
+            echo ""
+            echo "- Node: 20"
+            echo "- Install: \`npm ci\` (team-site lockfile)"
+            echo "- Build: \`npm run build\` in \`team-site/\`"
+            echo "- Artifact: \`site-dist-${GITHUB_SHA}\` from \`team-site/dist\`"
+            echo "- Deploy is gated on this workflow succeeding on \`main\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "CI gate passed for commit ${GITHUB_SHA}."
