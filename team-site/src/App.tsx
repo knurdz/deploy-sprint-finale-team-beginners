@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react';
 import {
   Activity,
   Bell,
   BookOpen,
   CalendarCheck,
+  CloudSun,
   GitBranch,
   GraduationCap,
   Search,
@@ -17,6 +19,39 @@ import { deadlineCards } from './data/deadlines';
 import { sprintStats } from './data/stats';
 import { getPublicDeployLabel } from './config/deploy';
 import { getAverageProgress } from './utils/metrics';
+
+interface WeatherData {
+  city?: string;
+  temp?: number;
+  weather?: string;
+  provider?: string;
+}
+
+function WeatherWidget() {
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+
+  useEffect(() => {
+    fetch('/api/weather.json')
+      .then((res) => {
+        if (!res.ok) throw new Error('Weather data unavailable');
+        return res.json();
+      })
+      .then((data) => setWeather(data))
+      .catch(() => setWeather(null));
+  }, []);
+
+  return (
+    <div className="sidebarPanel" style={{ marginTop: '12px' }}>
+      <CloudSun size={18} />
+      <p style={{ fontWeight: '600' }}>
+        {weather ? `${weather.city || 'Colombo'}: ${weather.temp !== undefined ? `${weather.temp}°C` : ''} (${weather.weather || 'Clear'})` : 'Weather Integration Active'}
+      </p>
+      <p className="deployLabel">
+        Provider: {weather?.provider || 'openweather'}
+      </p>
+    </div>
+  );
+}
 
 export function App() {
   const averageProgress = getAverageProgress(courses);
@@ -61,6 +96,9 @@ export function App() {
             Release channel: {publicDeployLabel}
           </p>
         </div>
+
+        <WeatherWidget />
+        
       </aside>
 
       <section className="workspace">
