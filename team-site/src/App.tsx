@@ -1,10 +1,8 @@
-import { useEffect, useState } from 'react';
 import {
   Activity,
   Bell,
   BookOpen,
   CalendarCheck,
-  CloudSun,
   GitBranch,
   GraduationCap,
   Search,
@@ -13,49 +11,15 @@ import {
 } from 'lucide-react';
 import { CourseCard } from './components/CourseCard';
 import { DeadlineBoard } from './components/DeadlineBoard';
+import { LearningVelocity } from './components/LearningVelocity';
 import { StatCard } from './components/StatCard';
 import { courses } from './data/courses';
 import { deadlineCards } from './data/deadlines';
 import { sprintStats } from './data/stats';
-import { getPublicDeployLabel } from './config/deploy';
 import { getAverageProgress } from './utils/metrics';
-
-interface WeatherData {
-  city?: string;
-  temp?: number;
-  weather?: string;
-  provider?: string;
-}
-
-function WeatherWidget() {
-  const [weather, setWeather] = useState<WeatherData | null>(null);
-
-  useEffect(() => {
-    fetch('/api/weather.json')
-      .then((res) => {
-        if (!res.ok) throw new Error('Weather data unavailable');
-        return res.json();
-      })
-      .then((data) => setWeather(data))
-      .catch(() => setWeather(null));
-  }, []);
-
-  return (
-    <div className="sidebarPanel" style={{ marginTop: '12px' }}>
-      <CloudSun size={18} />
-      <p style={{ fontWeight: '600' }}>
-        {weather ? `${weather.city || 'Colombo'}: ${weather.temp !== undefined ? `${weather.temp}°C` : ''} (${weather.weather || 'Clear'})` : 'Weather Integration Active'}
-      </p>
-      <p className="deployLabel">
-        Provider: {weather?.provider || 'openweather'}
-      </p>
-    </div>
-  );
-}
 
 export function App() {
   const averageProgress = getAverageProgress(courses);
-  const publicDeployLabel = getPublicDeployLabel();
 
   return (
     <main className="shell">
@@ -65,8 +29,8 @@ export function App() {
             <GraduationCap size={24} />
           </div>
           <div>
-            <strong>Team BEGINNERS</strong>
-            <span>Deploy Sprint · Virtual LMS</span>
+            <strong>Deploy Sprint</strong>
+            <span>Virtual LMS</span>
           </div>
         </div>
 
@@ -92,19 +56,13 @@ export function App() {
         <div className="sidebarPanel">
           <ShieldCheck size={18} />
           <p>Repository changes are reviewed before every release.</p>
-          <p className="deployLabel" data-testid="public-deploy-label">
-            Release channel: {publicDeployLabel}
-          </p>
         </div>
-
-        <WeatherWidget />
-        
       </aside>
 
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Team BEGINNERS · Qualifier Dashboard</p>
+            <p className="eyebrow">Qualifier Dashboard</p>
             <h1>Learning operations at a glance</h1>
           </div>
 
@@ -138,6 +96,8 @@ export function App() {
             <StatCard key={stat.label} stat={stat} />
           ))}
         </section>
+
+        <LearningVelocity courses={courses} />
 
         <section className="contentGrid">
           <div className="panel" id="courses">
