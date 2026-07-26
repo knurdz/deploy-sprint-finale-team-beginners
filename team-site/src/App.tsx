@@ -30,8 +30,8 @@ export function App() {
             <GraduationCap size={24} />
           </div>
           <div>
-            <strong>Deploy Sprint</strong>
-            <span>Virtual LMS</span>
+            <strong>Team BEGINNERS</strong>
+            <span>Deploy Sprint · Virtual LMS</span>
           </div>
         </div>
 
@@ -66,7 +66,7 @@ export function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Qualifier Dashboard</p>
+            <p className="eyebrow">Team BEGINNERS · Qualifier Dashboard</p>
             <h1>Learning operations at a glance</h1>
           </div>
 
