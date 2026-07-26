@@ -68,7 +68,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T22 |  |  |  |
 | T23 | [T23] Release Evidence Manifest | `release-manifest.json` artifact + `/status.releaseManifest` | commit, artifact, workflowRun, deployedAt, taskMarkers |
 | T24 |  |  |  |
-| T25 |  |  |  |
+| T25 | [T25] Hotfix Cherry-Pick Under Pressure | Cherry-pick `81849c4` from `task-assets/hotfix`; `TASK_ASSET.md`; metrics clamp | Focused PR only — no unrelated work |
 | T26 | [T26] Incident: Broken Deploy Recovery | `deploy-broken.yml` + `docs/incidents/broken-deploy-log.md` | Seeded `build` path → fix `team-site/dist`; rollback first if prod unhealthy |
 | T27 |  |  |  |
 | T28 | [T28] Race-Safe Idempotent Deploy | `scripts/idempotent-deploy.sh` + deploy concurrency/lock; artifact `t28-idempotent-deploy-<sha>` | two-pass dry-run + lock busy proof |
@@ -195,4 +195,12 @@ List anything judges should know without exposing credentials or private infrast
 - Failure path: `RELEASE_MODE=fail-health` refuses switch; previous `current` and known-good directory remain.
 - Evidence artifact: `t17-low-downtime-<sha>` (manifest + log).
 - Judge answer: traffic switches only when `current` symlink is atomically updated; bad health exits before that step.
+
+### T25 hotfix cherry-pick under pressure
+
+- Organizer asset branch: `task-assets/hotfix`.
+- Intended commit: `81849c4` (*Refresh hotfix asset*).
+- Intended fix: clamp `getAverageProgress` to `0..100` in `team-site/src/utils/metrics.ts` (already present on `main`).
+- This PR cherry-picks that commit onto `task/T25-hotfix-cherry-pick-under-pressure` and records `TASK_ASSET.md`.
+- Diff is focused: no unrelated task work. Verify with `git show 81849c4` and `git diff main...HEAD`.
 
