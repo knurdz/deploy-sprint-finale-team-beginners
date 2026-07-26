@@ -1,5 +1,7 @@
 name: CI
 
+# T21: explicit least-privilege permissions; PR runs do not read deploy secrets.
+
 on:
   pull_request:
   push:
@@ -8,6 +10,11 @@ on:
 
 permissions:
   contents: read
+  actions: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
   packages: write
 
 jobs:
@@ -26,8 +33,9 @@ jobs:
           cache: npm
           cache-dependency-path: team-site/package-lock.json
 
-      - name: Check private deploy token (Actions only)
-        id: deploy_secret
+      - name: Check private deploy token (push to main only)
+        id: deploy_secret_main
+        if: github.event_name == 'push'
         env:
           PRIVATE_DEPLOY_TOKEN: ${{ secrets.PRIVATE_DEPLOY_TOKEN }}
         run: |
@@ -40,6 +48,14 @@ jobs:
             echo "PRIVATE_DEPLOY_TOKEN is not configured."
             exit 1
           fi
+
+      - name: PR CI without deploy secrets (T21)
+        id: deploy_secret_pr
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          echo "Pull request CI does not read PRIVATE_DEPLOY_TOKEN or deployer secrets."
 
       - name: Install from team-site lockfile
         run: npm ci
@@ -107,13 +123,14 @@ jobs:
           DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
           DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
           DOMAIN_CONNECTED: "true"
-          TASK_MARKER: T18
-          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
-          APP_PORT: ${{ vars.APP_PORT || '8080' }}
-          CONTAINER_IMAGE: ${{ steps.container.outputs.image }}
+
+          TASK_MARKER: T23
+          BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T15,T23
+
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
-          PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret.outputs.configured }}
+          PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret_main.outputs.configured || steps.deploy_secret_pr.outputs.configured }}
           FEATURE_SHOW_INSIGHTS: ${{ secrets.FEATURE_SHOW_INSIGHTS || vars.FEATURE_SHOW_INSIGHTS || 'false' }}
           VITE_FEATURE_SHOW_INSIGHTS: ${{ secrets.FEATURE_SHOW_INSIGHTS || vars.FEATURE_SHOW_INSIGHTS || 'false' }}
           VITE_PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
@@ -133,6 +150,21 @@ jobs:
         run: npm run build
         working-directory: team-site
 
+      - name: Generate release manifest (T23)
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          DEPLOY_TIME: ${{ github.run_started_at }}
+          BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T15,T23
+        run: node team-site/scripts/write-release-manifest.mjs
+
+      - name: Copy release manifest into dist
+        run: |
+          set -euo pipefail
+          cp release-manifest.json team-site/dist/release-manifest.json
+          test -f team-site/dist/release-manifest.json
+
       - name: Upload team-site/dist artifact
         uses: actions/upload-artifact@v4
         with:
@@ -140,6 +172,15 @@ jobs:
           path: team-site/dist
           if-no-files-found: error
 
+
+      - name: Upload release manifest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ github.sha }}
+          path: release-manifest.json
+          if-no-files-found: error
+
+      - name: Publish Resend email status evidence
       - name: Build container image
         env:
           IMAGE: ${{ steps.container.outputs.image }}
@@ -205,6 +246,7 @@ jobs:
           path: container-deploy-manifest.json
           if-no-files-found: error
 
+
       - name: CI gate summary
         run: |
           set -euo pipefail
@@ -216,8 +258,15 @@ jobs:
             echo "- Build: \`npm run build\` in \`team-site/\`"
             echo "- Artifact: \`site-dist-${GITHUB_SHA}\` from \`team-site/dist\`"
             echo "- Feature flag: FEATURE_SHOW_INSIGHTS (value redacted; boolean only in /status)"
+            echo "- T21: PR runs skip deploy secrets; permissions contents:read + actions:write (artifacts)"
             echo "- Container image: \`${{ steps.container.outputs.image }}\`"
             echo "- Container manifest artifact: \`container-deploy-${GITHUB_SHA}\`"
             echo "- Deploy is gated on this workflow succeeding on \`main\`"
+            echo ""
+            echo "## T23 release manifest"
+            echo "- File: \`release-manifest.json\`"
+            echo "- Artifact: \`release-manifest-${GITHUB_SHA}\`"
+            echo "- Also in \`/status.releaseManifest\` and \`/release-manifest.json\`"
+            echo "- Fields: commit, artifact, workflowRun, deployedAt, taskMarkers"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "CI gate passed for commit ${GITHUB_SHA}."

@@ -15,12 +15,13 @@ Complete this file on `main` as tasks are completed. Do not paste secrets, priva
 - Current production commit:
 - Current artifact/image identifier: `site-dist-<sha>` and `ghcr.io/knurdz/deploy-sprint-finale-team-beginners/team-site:<sha>`
 - Current deployment workflow run:
-- Current release manifest path or URL: https://beginners.deploysprint-finals.knurdz.org/status
+- Current release manifest path or URL: `/release-manifest.json` and Actions artifact `release-manifest-<sha>`
 - Notes on live evidence or fallback evidence:
   - HTTPS domain: https://beginners.deploysprint-finals.knurdz.org
   - HTTP domain compatibility and raw IP: http://20.114.32.177
   - `/status` must show `domain.connected=true` and assigned domain fields
   - DNS A record: `beginners` → `20.114.32.177`
+  - T23: `release-manifest.json` maps commit SHA to `site-dist-<sha>` and workflow run ID
 
 ## Score Summary
 
@@ -54,9 +55,9 @@ Use this section for short public notes and links. Full task instructions and ch
 | T18 |  | `/status` `container.image`, CI + deploy logs | `docs/container-deploy.md`; GHCR SHA tag + organizer deployer |
 | T19 |  |  |  |
 | T20 |  |  |  |
-| T21 |  |  |  |
+| T21 |  | Workflow YAML + Actions queue evidence | `docs/workflow-safety.md`; `production-*` deploy concurrency |
 | T22 |  |  |  |
-| T23 |  |  |  |
+| T23 | [T23] Release Evidence Manifest | `release-manifest.json` artifact + `/status.releaseManifest` | commit, artifact, workflowRun, deployedAt, taskMarkers |
 | T24 |  |  |  |
 | T25 |  |  |  |
 | T26 | [T26] Incident: Broken Deploy Recovery | `deploy-broken.yml` + `docs/incidents/broken-deploy-log.md` | Seeded `build` path → fix `team-site/dist`; rollback first if prod unhealthy |
@@ -70,7 +71,7 @@ Use this section for short public notes and links. Full task instructions and ch
 - T02: Domain evidence is in `/status` (`domain.connected`, assigned domain, A-record target) and `domain.config.json`. Verify HTTPS domain, plain HTTP domain/IP compatibility at `http://20.114.32.177`. No DNS portal credentials are committed.
 - T09: Conflicted file was `team-site/src/data/deadlines.ts`. Rule: keep both useful outcomes — main's `repo-setup-checkpoint` card and organizer `merge-conflict-lab` card from `task-assets/conflict-merge`. Verify with a source search for both ids and zero `<<<<<<<` / `=======` / `>>>>>>>` markers, then `npm run build` in `team-site/`.
 - T06: CI workflow (`.github/workflows/ci.yml`) runs on `pull_request` and `push` to `main`. It uses Node 20, `npm ci` from `team-site/package-lock.json`, `npm run build` in `team-site/`, and uploads `team-site/dist` as `site-dist-<sha>`. `Request Organizer Deploy` only continues when that CI workflow succeeds on `main`.
-- T18: CI also builds/pushes `ghcr.io/.../team-site:<sha>`, writes `container-deploy-<sha>` manifest artifact, and deploy requests include `deploy_mode: container` for the organizer deployer. See `docs/container-deploy.md`.
+- T21: Every workflow under `.github/workflows/` declares explicit `permissions` and `concurrency`. Production deploy and rollback share `production-${{ github.ref }}` with `cancel-in-progress: false`. PR CI and PR Preview do not read deploy secrets. See `docs/workflow-safety.md`.
 
 List anything judges should know without exposing credentials or private infrastructure details.
 
@@ -89,6 +90,14 @@ List anything judges should know without exposing credentials or private infrast
 - CI step summary records cache-hit output and `npm audit` exit code (document-only).
 - Cache invalidates when `team-site/package-lock.json` changes; `npm ci` still enforces lockfile integrity.
 
+### T21 least privilege and concurrency
+
+- Explicit `permissions` on CI, deploy, rollback, PR Preview, and Pages workflows (no default broad write).
+- Deploy concurrency: `group: production-${{ github.ref }}`, `cancel-in-progress: false` — overlapping deploys queue.
+- CI concurrency: `ci-${{ github.workflow }}-${{ github.ref }}`, `cancel-in-progress: true`.
+- PR workflows: no `PRIVATE_DEPLOY_TOKEN` / deployer secret references on `pull_request` events.
+- Verify: push two quick commits to `main` or double `workflow_dispatch` deploy; confirm one deploy run queues in Actions.
+
 ### T15 runtime feature flag
 
 - Snippet adapted in `team-site/src/config/featureFlags.ts` (reads `VITE_FEATURE_SHOW_INSIGHTS`).
@@ -99,6 +108,15 @@ List anything judges should know without exposing credentials or private infrast
 - Verify on: set to `true`, rebuild; panel visible; status `showInsights: true`.
 - Incident disable: set `FEATURE_SHOW_INSIGHTS=false` and redeploy (no source change).
 
+
+### T23 release evidence manifest
+
+- Starter adapted to `team-site/scripts/write-release-manifest.mjs` (also written during `write-release-evidence.mjs`).
+- CI generates `release-manifest.json` and uploads artifact `release-manifest-<sha>`.
+- Manifest fields: `task`, `commit`, `artifact` (`site-dist-<sha>`), `workflowRun`, `deployedAt`/`deployTime`, `taskMarkers`, `secretsRedacted`.
+- Safe exposure: `/status.releaseManifest` and `/release-manifest.json` in the dist artifact.
+- Verify: download Actions artifact or open `/release-manifest.json` and confirm `commit` matches the scored SHA.
+
 ### T16 Resend email alerts
 
 - API key lives only as GitHub Secret `RESEND_API_KEY` (never `VITE_`, never committed).
@@ -107,25 +125,4 @@ List anything judges should know without exposing credentials or private infrast
 - Evidence: `/status` `email.provider=resend`, `email.configured=true`, `secretRedacted=true` plus `/email/status.json`.
 - Client marker: `team-site/src/config/emailAlerts.ts` (provider/secret name only; no key).
 - Verify: CI summary + `site-dist-<sha>` artifact contains redacted status; search repo/artifacts for no `re_` key values.
-
-### T19 post-deploy smoke tests
-
-- Added final job `smoke-test` in `.github/workflows/deploy.yml` that runs only after `request-deploy`.
-- Checks: `/` (or dist homepage artifact), `/health`, `/status` commit == expected SHA, task page `/contact.html`.
-- Modes: `fallback` builds `team-site/dist` and greps expected SHA in `dist/status` (no-live evidence); `live` curls `PUBLIC_URL` with retries + `--fail`.
-- Starter bug: expected commit used `github.sha` on `workflow_run` (wrong). Fixed to `workflow_run.head_sha` / job output `sha`. Log line to cite: `Log line proving target: fallback://team-site/dist` or `live://… (PUBLIC_URL)`.
-- Verify: Actions → Request Organizer Deploy → Run workflow → `smoke_mode=fallback` on this branch; confirm smoke-test passes. After VPS has the SHA, re-run with `smoke_mode=live`.
-- Judge answer: `/status` commit (or artifact digest) vs expected SHA catches a stale/partial deploy; homepage 200 alone does not.
-- Secrets stay server-side (`PRIVATE_DEPLOY_TOKEN`, `DEPLOYER_DISPATCH_TOKEN`); smoke only reads public URL vars and built status.
-
-### T26 incident broken deploy recovery
-
-- Source of incident: organizer branch `task-assets/broken-deploy` seeded `.github/workflows/deploy-broken.yml` uploading `path: build`.
-- Decisive root-cause log line: `No files were found with the provided path: build` (Vite output is `team-site/dist`).
-- Response order: rollback first if production is unhealthy (`.github/workflows/rollback.yml` + known-good `release_ref`, prefer `dry_run=true` for no-live), then forward-fix the workflow.
-- Forward fix: install/build in `team-site/`, upload `team-site/dist`, refuse other `recovery_target` values; `if-no-files-found: error`.
-- Starter refinement: bare `dist` or `build` is wrong; log line to cite after fix: `Log line proving recovery target: recovery_target=team-site/dist`.
-- Verify: Actions → Broken deploy rehearsal → Run workflow; confirm artifact `recovered-deploy-output`. Optional: run with `recovery_target=build` to show failure path.
-- Judge answer: the `path: build` / “No files were found…” log proved root cause; rollback first protects users, forward fix prevents repeat.
-- Incident write-up: `docs/incidents/broken-deploy-log.md`.
 

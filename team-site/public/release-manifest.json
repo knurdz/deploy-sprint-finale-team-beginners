@@ -1,0 +1,23 @@
+{
+  "task": "T23",
+  "commit": "pending-ci-build",
+  "commit_short": "pending",
+  "artifact": "site-dist-pending-ci-build",
+  "workflowRun": "pending",
+  "deployedAt": "pending-ci-build",
+  "deployTime": "pending-ci-build",
+  "taskMarkers": [
+    "T01",
+    "T02",
+    "T04",
+    "T05",
+    "T06",
+    "T07",
+    "T09",
+    "T10",
+    "T12",
+    "T15",
+    "T23"
+  ],
+  "secretsRedacted": true
+}
