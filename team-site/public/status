@@ -5,7 +5,20 @@
   "commit_short": "pending",
   "release_id": "pending",
   "deploy_time": "pending-ci-build",
-  "public_url": "http://20.114.32.177",
-  "task": "T01",
-  "marker": "T01"
+  "public_url": "https://beginners.deploysprint-finals.knurdz.org",
+  "public_url_mode": "domain",
+  "task": "T02",
+  "marker": "T02",
+  "domain": {
+    "connected": true,
+    "assignedDomain": "beginners.deploysprint-finals.knurdz.org",
+    "recordType": "A",
+    "recordName": "beginners",
+    "recordTarget": "20.114.32.177",
+    "domainPublicUrl": "https://beginners.deploysprint-finals.knurdz.org",
+    "ipPublicUrl": "http://20.114.32.177",
+    "verifiedAt": "pending-ci-build"
+  },
+  "domain.connected": true,
+  "assignedDomain": "beginners.deploysprint-finals.knurdz.org"
 }
