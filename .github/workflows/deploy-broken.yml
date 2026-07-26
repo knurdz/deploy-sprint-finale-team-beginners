@@ -1,0 +1,87 @@
+name: Broken deploy rehearsal
+
+# T26: recover from seeded broken deploy (uploaded `build` instead of `dist`).
+# AI-REVIEW-MARKER: participant must manually remove this marker
+# PR-AGENT-MARKER: participant must manually remove this marker
+
+on:
+  workflow_dispatch:
+    inputs:
+      recovery_target:
+        description: "Artifact path to upload after recovery (must be team-site/dist)"
+        required: false
+        type: string
+        default: team-site/dist
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Recovered dist upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: team-site/package-lock.json
+
+      - name: Install from team-site lockfile
+        run: npm ci
+        working-directory: team-site
+
+      - name: Build production bundle
+        run: npm run build
+        working-directory: team-site
+
+      - name: Resolve recovery upload path
+        id: recovery
+        env:
+          RECOVERY_TARGET: ${{ inputs.recovery_target }}
+        run: |
+          set -euo pipefail
+
+          # Starter bug used path "build" (or bare "dist"). Fixed target must be team-site/dist.
+          target="${RECOVERY_TARGET:-team-site/dist}"
+          echo "Recovery target input raw value: ${target}"
+          echo "Log line proving recovery target: recovery_target=${target}"
+
+          if [ "$target" != "team-site/dist" ]; then
+            echo "Refusing unsafe recovery_target=${target}. Expected team-site/dist (Vite output)."
+            exit 1
+          fi
+
+          if [ ! -d "$target" ]; then
+            echo "Recovery target directory missing: ${target}"
+            exit 1
+          fi
+
+          echo "path=${target}" >> "$GITHUB_OUTPUT"
+          echo "Resolved upload path=${target}"
+
+      - name: Upload production dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovered-deploy-output
+          path: ${{ steps.recovery.outputs.path }}
+          if-no-files-found: error
+
+      - name: Recovery summary
+        env:
+          UPLOAD_PATH: ${{ steps.recovery.outputs.path }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## T26 Broken Deploy Recovery"
+            echo ""
+            echo "- Symptom: seeded workflow uploaded \`build\` instead of Vite \`dist\`"
+            echo "- Root cause log (seeded): No files were found with the provided path: build"
+            echo "- Recovery target: \`${UPLOAD_PATH}\`"
+            echo "- Artifact: \`recovered-deploy-output\`"
+            echo "- Result: pass"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "T26 recovery upload succeeded for ${UPLOAD_PATH}"

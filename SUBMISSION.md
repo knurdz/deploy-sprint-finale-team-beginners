@@ -59,7 +59,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T23 |  |  |  |
 | T24 |  |  |  |
 | T25 |  |  |  |
-| T26 |  |  |  |
+| T26 | [T26] Incident: Broken Deploy Recovery | `deploy-broken.yml` + `docs/incidents/broken-deploy-log.md` | Seeded `build` path → fix `team-site/dist`; rollback first if prod unhealthy |
 | T27 |  |  |  |
 | T28 |  |  |  |
 | T29 |  |  |  |
@@ -117,3 +117,15 @@ List anything judges should know without exposing credentials or private infrast
 - Verify: Actions → Request Organizer Deploy → Run workflow → `smoke_mode=fallback` on this branch; confirm smoke-test passes. After VPS has the SHA, re-run with `smoke_mode=live`.
 - Judge answer: `/status` commit (or artifact digest) vs expected SHA catches a stale/partial deploy; homepage 200 alone does not.
 - Secrets stay server-side (`PRIVATE_DEPLOY_TOKEN`, `DEPLOYER_DISPATCH_TOKEN`); smoke only reads public URL vars and built status.
+
+### T26 incident broken deploy recovery
+
+- Source of incident: organizer branch `task-assets/broken-deploy` seeded `.github/workflows/deploy-broken.yml` uploading `path: build`.
+- Decisive root-cause log line: `No files were found with the provided path: build` (Vite output is `team-site/dist`).
+- Response order: rollback first if production is unhealthy (`.github/workflows/rollback.yml` + known-good `release_ref`, prefer `dry_run=true` for no-live), then forward-fix the workflow.
+- Forward fix: install/build in `team-site/`, upload `team-site/dist`, refuse other `recovery_target` values; `if-no-files-found: error`.
+- Starter refinement: bare `dist` or `build` is wrong; log line to cite after fix: `Log line proving recovery target: recovery_target=team-site/dist`.
+- Verify: Actions → Broken deploy rehearsal → Run workflow; confirm artifact `recovered-deploy-output`. Optional: run with `recovery_target=build` to show failure path.
+- Judge answer: the `path: build` / “No files were found…” log proved root cause; rollback first protects users, forward fix prevents repeat.
+- Incident write-up: `docs/incidents/broken-deploy-log.md`.
+
