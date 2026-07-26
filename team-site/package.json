@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "write-evidence": "node scripts/write-release-evidence.mjs",
+    "build": "npm run write-evidence && tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
   },
