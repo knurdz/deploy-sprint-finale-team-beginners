@@ -64,6 +64,8 @@ Use this section for short public notes and links. Full task instructions and ch
 | T27 |  |  |  |
 | T28 | [T28] Race-Safe Idempotent Deploy | `scripts/idempotent-deploy.sh` + deploy concurrency/lock; artifact `t28-idempotent-deploy-<sha>` | two-pass dry-run + lock busy proof |
 | T29 |  |  |  |
+| T28 |  |  |  |
+| T29 | [T29] Disaster Recovery From Actions Only | `.github/workflows/recover.yml` + `docs/recovery.md` | Actions-only restore; `dry_run` manifest; no manual VPS |
 | T30 |  |  |  |
 
 ## Public Notes
