@@ -49,6 +49,16 @@ const publicUrl =
 
 const taskMarker = process.env.TASK_MARKER || 'T02';
 
+// T15: boolean only — never write the raw secret/string beyond true/false.
+const showInsights =
+  process.env.FEATURE_SHOW_INSIGHTS === 'true' ||
+  process.env.VITE_FEATURE_SHOW_INSIGHTS === 'true';
+const featureFlags = {
+  task: 'T15',
+  showInsights,
+  valueRedacted: true,
+};
+
 const domainEvidence = {
   connected: domainConnected,
   assignedDomain,
@@ -89,6 +99,7 @@ const status = {
     privateDeployTokenConfigured: privateTokenConfigured,
     secretsRedacted: true,
   },
+  featureFlags,
   contact: contactEvidence,
   'contact.provider': 'web3forms',
   'contact.configured': web3formsConfigured,

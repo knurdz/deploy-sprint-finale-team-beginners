@@ -19,6 +19,7 @@ import { courses } from './data/courses';
 import { deadlineCards } from './data/deadlines';
 import { sprintStats } from './data/stats';
 import { getPublicDeployLabel } from './config/deploy';
+import { featureFlags } from './config/featureFlags';
 import { getAverageProgress } from './utils/metrics';
 
 interface WeatherData {
@@ -57,6 +58,7 @@ function WeatherWidget() {
 export function App() {
   const averageProgress = getAverageProgress(courses);
   const publicDeployLabel = getPublicDeployLabel();
+  const flags = featureFlags();
 
   return (
     <main className="shell">
@@ -103,7 +105,14 @@ export function App() {
         </div>
 
         <WeatherWidget />
-        
+
+        {flags.showInsights ? (
+          <div className="sidebarPanel" data-testid="feature-insights" style={{ marginTop: '12px' }}>
+            <Activity size={18} />
+            <p style={{ fontWeight: 600 }}>Insights panel (T15)</p>
+            <p className="deployLabel">Controlled by FEATURE_SHOW_INSIGHTS (value redacted)</p>
+          </div>
+        ) : null}
       </aside>
 
       <section className="workspace">
