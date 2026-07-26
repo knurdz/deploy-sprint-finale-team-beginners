@@ -8,6 +8,7 @@ on:
 
 jobs:
   build:
+    name: CI gate (install, build, upload)
     runs-on: ubuntu-latest
     outputs:
       artifact_name: ${{ steps.meta.outputs.artifact_name }}
@@ -15,6 +16,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
 
       - name: Record immutable artifact identity
         id: meta
@@ -24,6 +26,7 @@ jobs:
           echo "artifact_name=site-dist-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
+
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -45,16 +48,32 @@ jobs:
             exit 1
           fi
 
-      - name: Install dependencies
+      - name: Install from team-site lockfile
         run: npm ci
         working-directory: team-site
 
+
       - name: Build once
+
         env:
           TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
+          TEAM_SLUG: ${{ vars.TEAM_SLUG || 'beginners' }}
+          RELEASE_ID: ${{ github.run_id }}
+          DEPLOY_TIME: ${{ github.run_started_at }}
+          PUBLIC_URL_MODE: ${{ vars.PUBLIC_URL_MODE || 'domain' }}
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+          IP_PUBLIC_URL: ${{ vars.IP_PUBLIC_URL }}
+          DOMAIN_PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL }}
+          ASSIGNED_DOMAIN: ${{ vars.ASSIGNED_DOMAIN }}
+          DNS_RECORD_TYPE: ${{ vars.DNS_RECORD_TYPE }}
+          DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
+          DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
+          DOMAIN_CONNECTED: "true"
+          TASK_MARKER: T06
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret.outputs.configured }}
+
           VITE_PUBLIC_URL: ${{ vars.PUBLIC_URL || vars.DOMAIN_PUBLIC_URL || secrets.PUBLIC_URL || vars.IP_PUBLIC_URL }}
           BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
           TASK_MARKER: T03
@@ -62,6 +81,7 @@ jobs:
         working-directory: team-site
 
       - name: Upload immutable dist artifact
+
         uses: actions/upload-artifact@v4
         with:
           name: site-dist-${{ github.sha }}
@@ -153,3 +173,4 @@ jobs:
           name: release-manifest-${{ needs.build.outputs.commit_sha }}
           path: release-manifest.json
           if-no-files-found: error
+
