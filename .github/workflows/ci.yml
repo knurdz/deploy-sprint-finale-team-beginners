@@ -1,8 +1,6 @@
 name: CI
 
-# T21: explicit least-privilege permissions; PR runs do not read deploy secrets.
-# Hotfix: packages:write belongs under permissions (not concurrency); restore Resend evidence step.
-# AI-REVIEW-MARKER: participant must manually remove this marker
+
 
 on:
   pull_request:
