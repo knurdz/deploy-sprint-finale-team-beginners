@@ -60,7 +60,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T23 | [T23] Release Evidence Manifest | `release-manifest.json` artifact + `/status.releaseManifest` | commit, artifact, workflowRun, deployedAt, taskMarkers |
 | T24 |  |  |  |
 | T25 |  |  |  |
-| T26 |  |  |  |
+| T26 | [T26] Incident: Broken Deploy Recovery | `deploy-broken.yml` + `docs/incidents/broken-deploy-log.md` | Seeded `build` path → fix `team-site/dist`; rollback first if prod unhealthy |
 | T27 |  |  |  |
 | T28 |  |  |  |
 | T29 |  |  |  |
