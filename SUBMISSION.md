@@ -43,7 +43,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T07 | [T07] OpenWeather API Widget | Merged |  |
 | T08 |  |  |  |
 | T09 |  |  |  |
-| T10 |  |  |  |
+| T10 | [T10] Web3Forms Contact Service | `/contact`, `contact.html`, `/status` contact.provider | Secret name only: `WEB3FORMS_ACCESS_KEY` |
 | T11 |  |  |  |
 | T12 | [T12] Fast Dependency Pipeline | CI summary: cache-hit + npm ci + audit | `setup-node` cache keyed on `team-site/package-lock.json`; `npm ci` always runs |
 | T13 |  |  |  |
