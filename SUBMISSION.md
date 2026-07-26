@@ -4,19 +4,23 @@ Complete this file on `main` as tasks are completed. Do not paste secrets, priva
 
 ## Team
 
-- Team name:
-- Team members:
-- Live IP URL:
-- Assigned domain URL:
-- Repository URL:
+- Team name: BEGINNERS
+- Team members: kulunuthalgahagoda
+- Live IP URL: http://20.114.32.177
+- Assigned domain URL: https://beginners.deploysprint-finals.knurdz.org
+- Repository URL: https://github.com/knurdz/deploy-sprint-finale-team-beginners
 
 ## Release Evidence
 
 - Current production commit:
-- Current artifact/image identifier:
+- Current artifact/image identifier: `site-dist-<sha>`
 - Current deployment workflow run:
-- Current release manifest path or URL:
+- Current release manifest path or URL: https://beginners.deploysprint-finals.knurdz.org/status
 - Notes on live evidence or fallback evidence:
+  - HTTPS domain: https://beginners.deploysprint-finals.knurdz.org
+  - HTTP domain compatibility and raw IP: http://20.114.32.177
+  - `/status` must show `domain.connected=true` and assigned domain fields
+  - DNS A record: `beginners` → `20.114.32.177`
 
 ## Score Summary
 
@@ -30,8 +34,8 @@ Use this section for short public notes and links. Full task instructions and ch
 
 | Task | PR | Evidence | Notes |
 | --- | --- | --- | --- |
-| T01 |  |  |  |
-| T02 |  |  |  |
+| T01 | [T01] Launch Provided Website | `/health`, `/status`, CI deploy request | Merged |
+| T02 | [T02] Connect Custom Domain | `/status` domain block, `domain.config.json`, HTTPS+HTTP+IP | A record beginners → 20.114.32.177; `domain.connected=true` |
 | T03 |  |  |  |
 | T04 |  |  |  |
 | T05 | [T05] Secret And Config Separation | `/status` config block, `.env.example`, CI masked secret | `PUBLIC_DEPLOY_LABEL` variable; `PRIVATE_DEPLOY_TOKEN` secret (names only in PR) |
@@ -63,6 +67,6 @@ Use this section for short public notes and links. Full task instructions and ch
 
 ## Public Notes
 
-List anything judges should know without exposing credentials or private infrastructure details.
+- T02: Domain evidence is in `/status` (`domain.connected`, assigned domain, A-record target) and `domain.config.json`. Verify HTTPS domain, plain HTTP domain/IP compatibility at `http://20.114.32.177`. No DNS portal credentials are committed.
 
-AI-REVIEW-MARKER: participant must manually remove this marker
+List anything judges should know without exposing credentials or private infrastructure details.

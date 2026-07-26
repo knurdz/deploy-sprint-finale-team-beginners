@@ -1,0 +1,19 @@
+{
+  "assignedDomain": "beginners.deploysprint-finals.knurdz.org",
+  "DOMAIN_PUBLIC_URL": "https://beginners.deploysprint-finals.knurdz.org",
+  "PUBLIC_URL": "https://beginners.deploysprint-finals.knurdz.org",
+  "IP_PUBLIC_URL": "http://20.114.32.177",
+  "DNS_RECORD_TYPE": "A",
+  "DNS_RECORD_NAME": "beginners",
+  "DNS_RECORD_VALUE": "20.114.32.177",
+  "domain": {
+    "connected": true,
+    "assignedDomain": "beginners.deploysprint-finals.knurdz.org",
+    "recordType": "A",
+    "recordName": "beginners",
+    "recordTarget": "20.114.32.177",
+    "domainPublicUrl": "https://beginners.deploysprint-finals.knurdz.org",
+    "ipPublicUrl": "http://20.114.32.177",
+    "verifiedAt": "pending-ci-build"
+  }
+}
