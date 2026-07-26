@@ -53,7 +53,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T16 | [T16] Resend Email Alerts | `/status` email + `/email/status.json` | Secret name only: `RESEND_API_KEY`; CI dry-run evidence |
 | T17 |  |  |  |
 | T18 |  |  |  |
-| T19 |  |  |  |
+| T19 | [T19] Post-Deploy Smoke Tests | `.github/workflows/deploy.yml` `smoke-test` job; `/` `/health` `/status` `/contact.html` | Live + fallback modes; fails workflow on mismatch |
 | T20 |  |  |  |
 | T21 |  |  |  |
 | T22 |  |  |  |
