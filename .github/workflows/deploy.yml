@@ -1,6 +1,7 @@
 name: Request Organizer Deploy
 
 # T06: deployment runs only after the CI workflow succeeds on main (workflow_run).
+# T18: deploy request includes SHA-tagged container image metadata for the organizer deployer.
 
 on:
   workflow_run:
@@ -28,7 +29,7 @@ jobs:
         !contains(github.event.workflow_run.head_commit.message, '[skip deploy]')
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - name: Confirm CI gate passed
@@ -65,10 +66,14 @@ jobs:
             exit 1
           fi
 
+          repo="${GITHUB_REPOSITORY,,}"
+          image="ghcr.io/${repo}/team-site:${sha}"
+
           {
             echo "sha=$sha"
             echo "branch=$branch"
             echo "source_run_id=$source_run_id"
+            echo "container_image=$image"
           } >> "$GITHUB_OUTPUT"
 
       - name: Authorize deploy with private token (server-side only)
@@ -82,7 +87,7 @@ jobs:
           fi
           echo "Deploy authorized using masked PRIVATE_DEPLOY_TOKEN."
 
-      - name: Request deploy from organizer deployer
+      - name: Request container deploy from organizer deployer
         env:
           DEPLOYER_DISPATCH_TOKEN: ${{ secrets.DEPLOYER_DISPATCH_TOKEN }}
           DEPLOYER_REPO: knurdz/deploy-sprint-deployer
@@ -90,6 +95,10 @@ jobs:
           TEAM_SHA: ${{ steps.request.outputs.sha }}
           TEAM_BRANCH: ${{ steps.request.outputs.branch }}
           SOURCE_RUN_ID: ${{ steps.request.outputs.source_run_id }}
+          CONTAINER_IMAGE: ${{ steps.request.outputs.container_image }}
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
         run: |
           set -euo pipefail
 
@@ -110,11 +119,18 @@ jobs:
                   "sha": os.environ["TEAM_SHA"],
                   "branch": os.environ["TEAM_BRANCH"],
                   "source_run_id": os.environ["SOURCE_RUN_ID"],
+                  "deploy_mode": "container",
+                  "container_name": os.environ.get("CONTAINER_NAME", "deploy-sprint-team-01"),
+                  "app_port": os.environ.get("APP_PORT", "8080"),
+                  "image": os.environ["CONTAINER_IMAGE"],
+                  "public_url": os.environ.get("PUBLIC_URL", ""),
               },
           }
 
           print(json.dumps(payload))
           PY
+
+          echo "T18 container deploy request: image=${CONTAINER_IMAGE} name=${CONTAINER_NAME} port=${APP_PORT}"
 
           curl --fail-with-body --show-error --silent \
             -X POST \
@@ -124,4 +140,45 @@ jobs:
             "https://api.github.com/repos/${DEPLOYER_REPO}/dispatches" \
             --data @payload.json
 
-          echo "Requested organizer deployment for ${TEAM_REPO}@${TEAM_SHA}."
+          echo "Requested organizer container deployment for ${TEAM_REPO}@${TEAM_SHA}."
+
+      - name: Post-deploy health check
+        continue-on-error: true
+        env:
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL || 'https://beginners.deploysprint-finals.knurdz.org' }}
+          EXPECTED_SHA: ${{ steps.request.outputs.sha }}
+        run: |
+          set -euo pipefail
+          base="${PUBLIC_URL%/}"
+          echo "Waiting for ${base}/health after container deploy request..."
+          for attempt in $(seq 1 12); do
+            if curl -fsS "${base}/health" | grep -qx ok; then
+              echo "Health check passed on attempt ${attempt}."
+              if curl -fsS "${base}/status" | grep -q "${EXPECTED_SHA}"; then
+                echo "Status includes expected commit ${EXPECTED_SHA}."
+              else
+                echo "Status fetched; commit may still be rolling out (expected ${EXPECTED_SHA})."
+              fi
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Health check did not pass within timeout; deployer may still be running (see organizer logs)."
+          exit 0
+
+      - name: Deploy workflow summary
+        env:
+          CONTAINER_IMAGE: ${{ steps.request.outputs.container_image }}
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          TEAM_SHA: ${{ steps.request.outputs.sha }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## T18 container deploy request"
+            echo ""
+            echo "- Commit: \`${TEAM_SHA}\`"
+            echo "- Container: \`${CONTAINER_NAME}\` on port \`${APP_PORT}\`"
+            echo "- Image: \`${CONTAINER_IMAGE}\`"
+            echo "- Access path: organizer deployer only (no participant SSH)"
+          } >> "$GITHUB_STEP_SUMMARY"

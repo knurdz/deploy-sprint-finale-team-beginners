@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build:
     name: CI gate (install, build, upload)
@@ -76,6 +80,18 @@ jobs:
           fi
           echo "WEB3FORMS_ACCESS_KEY is configured for Web3Forms (value redacted)."
 
+      - name: Resolve container image tags
+        id: container
+        run: |
+          set -euo pipefail
+          repo="${GITHUB_REPOSITORY,,}"
+          image="ghcr.io/${repo}/team-site:${GITHUB_SHA}"
+          local_tag="deploy-sprint/team-site:${GITHUB_SHA}"
+          {
+            echo "image=${image}"
+            echo "local_tag=${local_tag}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build team-site
         env:
           TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
@@ -91,7 +107,10 @@ jobs:
           DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
           DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
           DOMAIN_CONNECTED: "true"
-          TASK_MARKER: T15
+          TASK_MARKER: T18
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          CONTAINER_IMAGE: ${{ steps.container.outputs.image }}
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret.outputs.configured }}
@@ -113,17 +132,84 @@ jobs:
           path: team-site/dist
           if-no-files-found: error
 
+      - name: Build container image
+        env:
+          IMAGE: ${{ steps.container.outputs.image }}
+          LOCAL_TAG: ${{ steps.container.outputs.local_tag }}
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          DOMAIN_PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL }}
+          IP_PUBLIC_URL: ${{ vars.IP_PUBLIC_URL }}
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg GITHUB_SHA="${GITHUB_SHA}" \
+            --build-arg TASK_MARKER=T18 \
+            --build-arg CONTAINER_IMAGE="${IMAGE}" \
+            --build-arg CONTAINER_NAME="${CONTAINER_NAME}" \
+            --build-arg APP_PORT="${APP_PORT}" \
+            --build-arg DOMAIN_PUBLIC_URL="${DOMAIN_PUBLIC_URL:-https://beginners.deploysprint-finals.knurdz.org}" \
+            --build-arg IP_PUBLIC_URL="${IP_PUBLIC_URL:-http://20.114.32.177}" \
+            -t "${IMAGE}" \
+            -t "${LOCAL_TAG}" \
+            team-site
+          echo "Built container images ${IMAGE} and ${LOCAL_TAG}"
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push container image to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          docker push "${{ steps.container.outputs.image }}"
+
+      - name: Write container deploy manifest
+        env:
+          IMAGE: ${{ steps.container.outputs.image }}
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+        run: |
+          set -euo pipefail
+          node -e "
+            const fs = require('node:fs');
+            const manifest = {
+              task: 'T18',
+              commit: process.env.GITHUB_SHA,
+              containerName: process.env.CONTAINER_NAME,
+              appPort: Number(process.env.APP_PORT),
+              image: process.env.IMAGE,
+              publicUrl: process.env.PUBLIC_URL || '',
+            };
+            fs.writeFileSync('container-deploy-manifest.json', JSON.stringify(manifest, null, 2) + '\n');
+          "
+
+      - name: Upload container deploy manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-deploy-${{ github.sha }}
+          path: container-deploy-manifest.json
+          if-no-files-found: error
+
       - name: CI gate summary
         run: |
           set -euo pipefail
           {
-            echo "## T06 CI gate"
+            echo "## T06 CI gate + T18 container build"
             echo ""
             echo "- Node: 20"
             echo "- Install: \`npm ci\` (team-site lockfile)"
             echo "- Build: \`npm run build\` in \`team-site/\`"
             echo "- Artifact: \`site-dist-${GITHUB_SHA}\` from \`team-site/dist\`"
             echo "- Feature flag: FEATURE_SHOW_INSIGHTS (value redacted; boolean only in /status)"
+            echo "- Container image: \`${{ steps.container.outputs.image }}\`"
+            echo "- Container manifest artifact: \`container-deploy-${GITHUB_SHA}\`"
             echo "- Deploy is gated on this workflow succeeding on \`main\`"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "CI gate passed for commit ${GITHUB_SHA}."
