@@ -1,8 +1,6 @@
 name: Disaster Recovery From Actions Only
 
 # T29: recreate runtime from Actions only (no manual VPS repair).
-# AI-REVIEW-MARKER: participant must manually remove this marker
-# PR-AGENT-MARKER: participant must manually remove this marker
 
 on:
   workflow_dispatch:
@@ -44,7 +42,6 @@ jobs:
 
           echo "T29 disaster recovery requested"
           echo "Raw workflow input name is restore_target (snake_case)."
-          # Starter bug used inputs.restoreTarget (empty). Fixed: inputs.restore_target.
 
           if [ -z "${RESTORE_TARGET}" ]; then
             echo "restore_target is empty. Provide the latest confirmed SHA/artifact/digest."
