@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test:release-readiness": "node scripts/check-release-readiness.mjs",
     "write-evidence": "node scripts/write-release-evidence.mjs",
     "build": "npm run write-evidence && tsc --noEmit && vite build",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "jest"
   },
   "dependencies": {
     "lucide-react": "^1.23.0",

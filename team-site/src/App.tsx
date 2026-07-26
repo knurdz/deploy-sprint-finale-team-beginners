@@ -1,3 +1,4 @@
+import { ReleaseReadiness } from './components/ReleaseReadiness';
 import { useEffect, useState } from 'react';
 import {
   Activity,
@@ -140,6 +141,7 @@ export function App() {
         </section>
 
         <section className="contentGrid">
+        <ReleaseReadiness />
           <div className="panel" id="courses">
             <div className="panelHeader">
               <div>
