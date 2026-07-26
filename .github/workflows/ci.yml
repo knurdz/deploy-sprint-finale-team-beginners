@@ -14,7 +14,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+<<<<<<< HEAD
+      - name: Setup Node
+        id: setup_node
+=======
       - name: Setup Node 20
+>>>>>>> origin/main
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -40,7 +45,29 @@ jobs:
         run: npm ci
         working-directory: team-site
 
+<<<<<<< HEAD
+      - name: Dependency cache and audit summary
+        working-directory: team-site
+        run: |
+          set -euo pipefail
+          {
+            echo "## T12 Fast Dependency Pipeline"
+            echo "- cache: npm"
+            echo "- cache-dependency-path: team-site/package-lock.json"
+            echo "- cache-hit: ${{ steps.setup_node.outputs.cache-hit }}"
+            echo "- install command: npm ci (always runs after cache restore)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          set +e
+          npm audit --omit=dev
+          audit_code=$?
+          set -e
+          echo "- npm audit exit code: ${audit_code} (documented only; does not fail the job)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Cache hit=${{ steps.setup_node.outputs.cache-hit }}; npm ci completed; audit exit=${audit_code}"
+
+      - name: Build
+=======
       - name: Build team-site
+>>>>>>> origin/main
         env:
           TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
           TEAM_SLUG: ${{ vars.TEAM_SLUG || 'beginners' }}

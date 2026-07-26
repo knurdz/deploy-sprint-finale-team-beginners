@@ -45,7 +45,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T09 |  |  |  |
 | T10 |  |  |  |
 | T11 |  |  |  |
-| T12 |  |  |  |
+| T12 | [T12] Fast Dependency Pipeline | CI summary: cache-hit + npm ci + audit | `setup-node` cache keyed on `team-site/package-lock.json`; `npm ci` always runs |
 | T13 |  |  |  |
 | T14 |  |  |  |
 | T15 |  |  |  |
@@ -78,3 +78,11 @@ List anything judges should know without exposing credentials or private infrast
 - Default `dry_run=true` for no-live fallback; set `dry_run=false` only when requesting organizer redeploy of the selected known-good SHA/tag.
 - Starter bug: `inputs.releaseRef` was empty; fixed to `inputs.release_ref`. Link failed diagnostic run and successful rerun in the PR when available.
 - Judge answer: provide the known-good `release_ref` (tag, SHA, or artifact id) to the rollback workflow — not current `main` source.
+
+### T12 fast dependency pipeline
+
+- Snippet placed in `.github/workflows/ci.yml` Setup Node step: `cache: npm` + `cache-dependency-path: team-site/package-lock.json`.
+- Same cache settings mirrored in `.github/workflows/pages.yml`.
+- Install stays `npm ci` in `team-site/` (never skipped on cache hit).
+- CI step summary records cache-hit output and `npm audit` exit code (document-only).
+- Cache invalidates when `team-site/package-lock.json` changes; `npm ci` still enforces lockfile integrity.
