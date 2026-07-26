@@ -48,7 +48,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T11 |  |  |  |
 | T12 | [T12] Fast Dependency Pipeline | CI summary: cache-hit + npm ci + audit | `setup-node` cache keyed on `team-site/package-lock.json`; `npm ci` always runs |
 | T13 |  |  |  |
-| T14 | (see T18) | `team-site/Dockerfile` multi-stage build | Production image shape included with T18 container deploy |
+| T14 | [T14] Production Docker Image | `team-site/Dockerfile` multi-stage; CI `docker-image-evidence-<sha>` | tag + image id; nginx serves `dist`; lockfile `npm ci` |
 | T15 | [T15] Runtime Feature Flag | `/status` `featureFlags` + Insights UI | `FEATURE_SHOW_INSIGHTS` secret/var → `VITE_FEATURE_SHOW_INSIGHTS`; no hardcoded flag |
 | T16 | [T16] Resend Email Alerts | `/status` email + `/email/status.json` | Secret name only: `RESEND_API_KEY`; CI dry-run evidence |
 | T17 |  |  |  |
@@ -99,6 +99,13 @@ List anything judges should know without exposing credentials or private infrast
 - Verify off: set secret/var to `false`, rebuild; panel hidden; status `showInsights: false`.
 - Verify on: set to `true`, rebuild; panel visible; status `showInsights: true`.
 - Incident disable: set `FEATURE_SHOW_INSIGHTS=false` and redeploy (no source change).
+
+### T14 production Docker image
+
+- Starter adapted to `team-site/Dockerfile`: `node:20-alpine` build (`npm ci` from `package-lock.json`) + `nginx:alpine` runtime serving `dist`.
+- Nginx config: `team-site/nginx.conf` (serves `/health`, `/status`, SPA fallback).
+- CI builds `ghcr.io/.../team-site:<sha>` and `deploy-sprint/team-site:<sha>`, smoke-tests `/health`, uploads `docker-image-evidence-<sha>` with tag + image id.
+- Verify: CI **Build production Docker image (T14)** green; download evidence artifact; optional local `docker build -t deploy-sprint/team-site:local team-site`.
 
 
 ### T23 release evidence manifest
