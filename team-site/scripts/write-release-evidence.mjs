@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -91,6 +91,35 @@ const contactEvidence = {
   accessKeyStoredInSecret: true,
 };
 
+// T16: Resend readiness only — never write API key, response tokens, or addresses.
+// Prefer artifact from prepare-resend-email.mjs; fall back to boolean CI flags only.
+let emailConfigured =
+  process.env.RESEND_CONFIGURED === 'true' ||
+  process.env.RESEND_API_KEY_CONFIGURED === 'true';
+let emailMode = process.env.EMAIL_ALERT_MODE || 'dry-run';
+const emailStatusPath = join(publicDir, 'email', 'status.json');
+if (existsSync(emailStatusPath)) {
+  try {
+    const emailArtifact = JSON.parse(readFileSync(emailStatusPath, 'utf8'));
+    if (typeof emailArtifact.configured === 'boolean') {
+      emailConfigured = emailArtifact.configured;
+    }
+    if (typeof emailArtifact.mode === 'string') {
+      emailMode = emailArtifact.mode;
+    }
+  } catch {
+    // Keep env-flag fallback if artifact is unreadable.
+  }
+}
+const emailEvidence = {
+  task: 'T16',
+  provider: 'resend',
+  configured: emailConfigured,
+  secretRedacted: true,
+  apiKeySecretName: 'RESEND_API_KEY',
+  mode: emailMode,
+};
+
 const status = {
   team,
   team_slug: process.env.TEAM_SLUG || 'beginners',
@@ -114,6 +143,9 @@ const status = {
   contact: contactEvidence,
   'contact.provider': 'web3forms',
   'contact.configured': web3formsConfigured,
+  email: emailEvidence,
+  'email.provider': 'resend',
+  'email.configured': emailConfigured,
 };
 
 if (previewPrNumber && previewBasePath) {

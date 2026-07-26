@@ -122,6 +122,14 @@ jobs:
           VITE_RELEASE_ID: ${{ github.run_id }}
           WEB3FORMS_CONFIGURED: "true"
           WEB3FORMS_ACCESS_KEY_CONFIGURED: "true"
+          WEB3FORMS_ACCESS_KEY: ${{ secrets.WEB3FORMS_ACCESS_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || secrets.RESEND_FROM_EMAIL }}
+          ALERT_RECIPIENT_EMAIL: ${{ vars.ALERT_RECIPIENT_EMAIL || secrets.ALERT_RECIPIENT_EMAIL }}
+          EMAIL_PROVIDER: ${{ vars.EMAIL_PROVIDER || 'resend' }}
+          EMAIL_ALERT_MODE: ${{ vars.EMAIL_ALERT_MODE || 'dry-run' }}
+          RESEND_CONFIGURED: ${{ steps.resend_secret.outputs.configured }}
+          RESEND_API_KEY_CONFIGURED: ${{ steps.resend_secret.outputs.configured }}
         run: npm run build
         working-directory: team-site
 
