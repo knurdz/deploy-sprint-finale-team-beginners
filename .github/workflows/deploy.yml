@@ -2,6 +2,7 @@ name: Request Organizer Deploy
 
 # T06: deployment runs only after the CI workflow succeeds on main (workflow_run).
 # T18: deploy request includes SHA-tagged container image metadata for the organizer deployer.
+# T19: post-deploy smoke-test verifies /, /health, /status commit, and a task page.
 
 on:
   workflow_run:
@@ -11,6 +12,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      smoke_mode:
+        description: "live = curl PUBLIC_URL after deploy request; fallback = build dist and inspect artifacts"
+        required: false
+        type: choice
+        options:
+          - live
+          - fallback
+        default: live
 
 permissions:
   contents: read
@@ -48,6 +58,7 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           MANUAL_SHA: ${{ github.sha }}
           MANUAL_RUN_ID: ${{ github.run_id }}
+          DISPATCH_SMOKE_MODE: ${{ github.event.inputs.smoke_mode || 'live' }}
         run: |
           set -euo pipefail
 
@@ -55,10 +66,21 @@ jobs:
             sha="$MANUAL_SHA"
             branch="main"
             source_run_id="$MANUAL_RUN_ID"
+            smoke_mode="$DISPATCH_SMOKE_MODE"
+            if [ "$smoke_mode" = "fallback" ]; then
+              skip_deploy="true"
+            else
+              skip_deploy="false"
+            fi
           else
+            # Starter bug used github.sha here (wrong on workflow_run). Fixed: head_sha.
             sha="$WORKFLOW_RUN_SHA"
             branch="$WORKFLOW_RUN_BRANCH"
             source_run_id="$WORKFLOW_RUN_ID"
+            # Always request organizer publish on CI success.
+            skip_deploy="false"
+            # Smoke uses artifact fallback by default (async VPS). Use workflow_dispatch live after rollout.
+            smoke_mode="fallback"
           fi
 
           if [ "$branch" != "main" ]; then
@@ -76,7 +98,10 @@ jobs:
             echo "container_image=$image"
           } >> "$GITHUB_OUTPUT"
 
+          echo "Resolved deploy sha=$sha smoke_mode=$smoke_mode skip_deploy=$skip_deploy"
+
       - name: Authorize deploy with private token (server-side only)
+        if: steps.request.outputs.skip_deploy != 'true'
         env:
           PRIVATE_DEPLOY_TOKEN: ${{ secrets.PRIVATE_DEPLOY_TOKEN }}
         run: |
