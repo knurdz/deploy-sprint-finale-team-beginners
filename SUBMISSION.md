@@ -33,7 +33,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T01 |  |  |  |
 | T02 |  |  |  |
 | T03 |  |  |  |
-| T04 |  |  |  |
+| T04 | [T04] Rollback To Known-Good Release | Actions summary + `rollback-manifest` artifact | `.github/workflows/rollback.yml`; input `release_ref`; default `dry_run=true` |
 | T05 | [T05] Secret And Config Separation | `/status` config block, `.env.example`, CI masked secret | `PUBLIC_DEPLOY_LABEL` variable; `PRIVATE_DEPLOY_TOKEN` secret (names only in PR) |
 | T06 |  |  |  |
 | T07 |  |  |  |
@@ -64,3 +64,10 @@ Use this section for short public notes and links. Full task instructions and ch
 ## Public Notes
 
 List anything judges should know without exposing credentials or private infrastructure details.
+
+### T04 rollback
+
+- Manual rollback workflow accepts `release_ref` and records a rollback manifest without editing application source.
+- Default `dry_run=true` for no-live fallback; set `dry_run=false` only when requesting organizer redeploy of the selected known-good SHA/tag.
+- Starter bug: `inputs.releaseRef` was empty; fixed to `inputs.release_ref`. Link failed diagnostic run and successful rerun in the PR when available.
+- Judge answer: provide the known-good `release_ref` (tag, SHA, or artifact id) to the rollback workflow — not current `main` source.
