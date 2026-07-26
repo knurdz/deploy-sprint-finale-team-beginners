@@ -25,6 +25,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: T27 secret scan
+        run: node scripts/secret-scan.mjs
+
       - name: Setup Node 20
         id: setup_node
         uses: actions/setup-node@v4
@@ -96,6 +99,30 @@ jobs:
           fi
           echo "WEB3FORMS_ACCESS_KEY is configured for Web3Forms (value redacted)."
 
+      - name: Prepare Sentry monitoring (T30)
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_RELEASE: ${{ github.sha }}
+        run: node scripts/prepare-sentry.mjs
+        working-directory: team-site
+
+      - name: Verify Sentry GitHub Secrets (T30)
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          set -euo pipefail
+          for name in SENTRY_DSN SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT; do
+            if [ -z "${!name:-}" ]; then
+              echo "${name} is not configured."
+              exit 1
+            fi
+          done
+          echo "Sentry secrets configured (SENTRY_AUTH_TOKEN value not printed)."
       - name: Verify RESEND_API_KEY secret
         id: resend_secret
         env:
@@ -172,10 +199,15 @@ jobs:
 
           TASK_MARKER: T24
           BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
-          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T14,T15,T16,T18,T21,T23,T24,T26
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T14,T15,T16,T17,T18,T21,T22,T23,T24,T26,T27,T28,T29,T30
           CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
           APP_PORT: ${{ vars.APP_PORT || '8080' }}
           CONTAINER_IMAGE: ${{ steps.container.outputs.image }}
+          COMPOSE_RUNTIME: "true"
+          COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01' }}
+          SERVICE_NAME: ${{ vars.SERVICE_NAME || 'deploy-sprint-team-01' }}
+          RUNTIME_ENV_PATH: ${{ vars.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env' }}
+          APP_IMAGE: ghcr.io/${{ github.repository }}/team-site:${{ github.sha }}
 
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
@@ -188,6 +220,12 @@ jobs:
           VITE_RELEASE_ID: ${{ github.run_id }}
           WEB3FORMS_CONFIGURED: "true"
           WEB3FORMS_ACCESS_KEY_CONFIGURED: "true"
+          SENTRY_DSN_CONFIGURED: "true"
+          SENTRY_CONFIGURED: "true"
+          SENTRY_RELEASE: ${{ github.sha }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_RELEASE_AUTOMATION: "true"
           WEB3FORMS_ACCESS_KEY: ${{ secrets.WEB3FORMS_ACCESS_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL || secrets.RESEND_FROM_EMAIL }}
@@ -213,7 +251,7 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           DEPLOY_TIME: ${{ github.run_started_at }}
           BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
-          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T14,T15,T16,T18,T21,T23,T24,T26
+          COMPLETED_TASK_MARKERS: T01,T02,T04,T05,T06,T07,T09,T10,T12,T14,T15,T16,T17,T18,T21,T22,T23,T24,T26,T27,T28,T29,T30
         run: node team-site/scripts/write-release-manifest.mjs
 
       - name: Copy release manifest into dist
@@ -229,6 +267,46 @@ jobs:
           path: team-site/dist
           if-no-files-found: error
 
+      - name: Create Sentry release (T30)
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          set -euo pipefail
+          curl -sSL https://sentry.io/get-cli/ | bash
+          export SENTRY_AUTH_TOKEN
+          sentry-cli releases new "${GITHUB_SHA}" --org "${SENTRY_ORG}" --project "${SENTRY_PROJECT}"
+          sentry-cli releases set-commits "${GITHUB_SHA}" --auto --ignore-empty --org "${SENTRY_ORG}" --project "${SENTRY_PROJECT}" || true
+          if ls team-site/dist/assets/*.map >/dev/null 2>&1; then
+            sentry-cli sourcemaps upload team-site/dist/assets \
+              --org "${SENTRY_ORG}" \
+              --project "${SENTRY_PROJECT}" \
+              --release "${GITHUB_SHA}" \
+              --url-prefix "~/" \
+              --validate
+          fi
+          sentry-cli releases finalize "${GITHUB_SHA}" --org "${SENTRY_ORG}" --project "${SENTRY_PROJECT}"
+          echo "Sentry release ${GITHUB_SHA} created (auth token not logged)."
+
+      - name: Validate Compose config (T22 dry-run)
+        run: node scripts/validate-compose-config.mjs
+
+      - name: Write compose deploy manifest (T22)
+        env:
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+          DOMAIN_PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL }}
+          COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'deploy-sprint-team-01' }}
+          SERVICE_NAME: ${{ vars.SERVICE_NAME || 'deploy-sprint-team-01' }}
+          RUNTIME_ENV_PATH: ${{ vars.RUNTIME_ENV_PATH || '/opt/deploy-sprint/team-01/.env' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+        run: node scripts/compose-runtime-manifest.mjs
+
+      - name: Upload compose deploy manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-deploy-${{ github.sha }}
+          path: compose-deploy-manifest.json
       - name: Upload release manifest artifact
         uses: actions/upload-artifact@v4
         with:
@@ -418,6 +496,7 @@ jobs:
           {
             echo "## T06 CI gate + T14 Docker image + T18 container build"
             echo ""
+            echo "- T27: \`scripts/secret-scan.mjs\` passed"
             echo "- Node: 20"
             echo "- Install: \`npm ci\` (team-site lockfile)"
             echo "- Build: \`npm run build\` in \`team-site/\`"
@@ -430,6 +509,8 @@ jobs:
             echo "- Image tag: \`${{ steps.container.outputs.image }}\`"
             echo "- Image id: \`${{ steps.docker_build.outputs.image_id }}\`"
             echo "- Docker evidence artifact: \`docker-image-evidence-${GITHUB_SHA}\`"
+            echo "- T22: \`docker compose config\` validated; artifact \`compose-deploy-${GITHUB_SHA}\`"
+            echo "- T30: Sentry SDK + release \`${GITHUB_SHA}\` (secrets redacted)"
             echo "- Container image: \`${{ steps.container.outputs.image }}\`"
             echo "- Container manifest artifact: \`container-deploy-${GITHUB_SHA}\`"
             echo "- Deploy is gated on this workflow succeeding on \`main\`"

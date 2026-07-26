@@ -15,6 +15,7 @@ Organizer baseline:
 | **Request Organizer Deploy** | `contents: read`, `actions: read` | Read-only; deploy uses `repository_dispatch` curl + secrets (not `GITHUB_TOKEN` write) |
 | **Rollback** | `contents: read`, `actions: read` | Manifest artifact; optional deployer dispatch on manual `dry_run=false` |
 | **Disaster Recovery (T29)** | `contents: read`, `actions: write` | Upload recovery runtime + manifest artifacts; live path uses deployer secrets |
+| **Low-Downtime Release (T17)** | `contents: read`, `actions: write` | Upload symlink-release rehearsal evidence |
 | **Deploy dashboard (Pages)** | `contents: read`, `pages: write`, `id-token: write`, `actions: read` | GitHub Pages OIDC publish |
 
 No workflow uses `permissions: write-all` or `pull_request_target`.
@@ -28,6 +29,7 @@ No workflow uses `permissions: write-all` or `pull_request_target`.
 | **Request Organizer Deploy** | `production-<ref>` | `false` | Overlapping deploy **queues**; avoids two VPS writes at once |
 | **Rollback** | `production-<ref>` | `false` | Shares queue with deploy so rollback and deploy do not race |
 | **Disaster Recovery** | `production-<ref>` | `false` | Same production queue as deploy/rollback |
+| **Low-Downtime Release** | `production-deploy-beginners` | `false` | Shares deploy queue with T28 production deploy |
 | **Pages** | `pages-<ref>` | `true` | Independent from VPS `production-*` group |
 
 ## PR workflows and deploy secrets

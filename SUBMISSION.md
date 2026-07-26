@@ -51,20 +51,21 @@ Use this section for short public notes and links. Full task instructions and ch
 | T14 | [T14] Production Docker Image | `team-site/Dockerfile` multi-stage; CI `docker-image-evidence-<sha>` | tag + image id; nginx serves `dist`; lockfile `npm ci` |
 | T15 | [T15] Runtime Feature Flag | `/status` `featureFlags` + Insights UI | `FEATURE_SHOW_INSIGHTS` secret/var → `VITE_FEATURE_SHOW_INSIGHTS`; no hardcoded flag |
 | T16 | [T16] Resend Email Alerts | `/status` email + `/email/status.json` | Secret name only: `RESEND_API_KEY`; CI dry-run evidence |
-| T17 |  |  |  |
+| T17 | [T17] Low-Downtime Release Strategy | `scripts/low-downtime-release.sh` + `low-downtime-release.yml` | Symlink `current` only after candidate health; keep previous on failure |
+| T17 | [T17] Low-Downtime Release Strategy | `low-downtime-release.yml` + `t17-low-downtime-<sha>` | Switch `current` only after health-check |
 | T18 |  | `/status` `container.image`, CI + deploy logs | `docs/container-deploy.md`; GHCR SHA tag + organizer deployer |
 | T19 |  |  |  |
 | T20 |  |  |  |
 | T21 |  | Workflow YAML + Actions queue evidence | `docs/workflow-safety.md`; `production-*` deploy concurrency |
-| T22 |  |  |  |
+| T22 |  | `compose.yml`, `compose-deploy-<sha>`, `/status` `runtime=compose` | `docs/compose-runtime.md`; remote `.env` at deploy only |
 | T23 | [T23] Release Evidence Manifest | `release-manifest.json` artifact + `/status.releaseManifest` | commit, artifact, workflowRun, deployedAt, taskMarkers |
 | T24 | [T24] Cloudflare Turnstile | `/contact` widget + `/status` turnstile + `/turnstile/status.json` | Secret name only: `TURNSTILE_SECRET_KEY`; site key public |
 | T25 |  |  |  |
 | T26 | [T26] Incident: Broken Deploy Recovery | `deploy-broken.yml` + `docs/incidents/broken-deploy-log.md` | Seeded `build` path → fix `team-site/dist`; rollback first if prod unhealthy |
-| T27 |  |  |  |
+| T27 |  | Secret scan workflow + CI step | `docs/incidents/secret-leak-drill.md`; no `leaky-debug.yml` |
 | T28 | [T28] Race-Safe Idempotent Deploy | `scripts/idempotent-deploy.sh` + deploy concurrency/lock; artifact `t28-idempotent-deploy-<sha>` | two-pass dry-run + lock busy proof |
 | T29 | [T29] Disaster Recovery From Actions Only | `.github/workflows/recover.yml` + `docs/recovery.md` | Actions-only restore; `dry_run` manifest; no manual VPS |
-| T30 |  |  |  |
+| T30 |  | `/status` monitoring + `sentry-test.html` | `docs/sentry-monitoring.md`; CI Sentry release step |
 
 ## Public Notes
 
@@ -72,6 +73,9 @@ Use this section for short public notes and links. Full task instructions and ch
 - T09: Conflicted file was `team-site/src/data/deadlines.ts`. Rule: keep both useful outcomes — main's `repo-setup-checkpoint` card and organizer `merge-conflict-lab` card from `task-assets/conflict-merge`. Verify with a source search for both ids and zero `<<<<<<<` / `=======` / `>>>>>>>` markers, then `npm run build` in `team-site/`.
 - T06: CI workflow (`.github/workflows/ci.yml`) runs on `pull_request` and `push` to `main`. It uses Node 20, `npm ci` from `team-site/package-lock.json`, `npm run build` in `team-site/`, and uploads `team-site/dist` as `site-dist-<sha>`. `Request Organizer Deploy` only continues when that CI workflow succeeds on `main`.
 - T21: Every workflow under `.github/workflows/` declares explicit `permissions` and `concurrency`. Production deploy and rollback share `production-${{ github.ref }}` with `cancel-in-progress: false`. PR CI and PR Preview do not read deploy secrets. See `docs/workflow-safety.md`.
+- T22: `compose.yml` + `.env.example` (names only); CI validates `docker compose config`; deploy request uses `deploy_mode: compose` and generates remote env at `RUNTIME_ENV_PATH`. See `docs/compose-runtime.md`.
+- T27: Fetched `task-assets/secret-leak`, rejected merging seeded leak files; added `scripts/secret-scan.mjs` + `secret-scan.yml` + CI gate. See `docs/incidents/secret-leak-drill.md`.
+- T30: `@sentry/react`, `prepare-sentry.mjs`, CI `sentry-cli` release; judge path `sentry-test.html`. Secrets: `SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`. See `docs/sentry-monitoring.md`.
 
 List anything judges should know without exposing credentials or private infrastructure details.
 
@@ -97,6 +101,28 @@ List anything judges should know without exposing credentials or private infrast
 - CI concurrency: `ci-${{ github.workflow }}-${{ github.ref }}`, `cancel-in-progress: true`.
 - PR workflows: no `PRIVATE_DEPLOY_TOKEN` / deployer secret references on `pull_request` events.
 - Verify: push two quick commits to `main` or double `workflow_dispatch` deploy; confirm one deploy run queues in Actions.
+
+### T22 compose runtime service
+
+- `compose.yml`: service `deploy-sprint-team-01`, `restart: unless-stopped`, healthcheck on `/health`, `env_file` for runtime `.env`.
+- `.env.example`: placeholder names only; real file at `/opt/deploy-sprint/team-01/.env` created by deployer (not committed).
+- CI: `scripts/validate-compose-config.mjs` + artifact `compose-deploy-<sha>`.
+- `/status`: `runtime: compose` and `compose` block when built with `COMPOSE_RUNTIME=true`.
+
+### T27 secret leak drill
+
+- Asset branch: `origin/task-assets/secret-leak` (rehearsal workflow + seeded fake token — do not merge verbatim).
+- Removed/blocked: no `.github/workflows/leaky-debug.yml`; no drill token string in repo.
+- Prevention: `node scripts/secret-scan.mjs`, workflow `.github/workflows/secret-scan.yml`, and CI step before build.
+- Verify: green Secret scan workflow on PR; local `node scripts/secret-scan.mjs` exits 0.
+
+### T30 Sentry monitoring release
+
+- Install: `@sentry/react` in `team-site/`.
+- Init: `src/sentry.ts` + generated `src/config/sentry-runtime.ts` (DSN only).
+- CI: verify four Sentry secrets; `sentry-cli releases` + sourcemaps after build.
+- Test error: open `sentry-test.html`, click **Send test error to Sentry** (once, for judges).
+- `/status`: `monitoring.provider=sentry`, `monitoring.release` = commit SHA.
 
 ### T15 runtime feature flag
 
@@ -158,3 +184,12 @@ List anything judges should know without exposing credentials or private infrast
 - Live: `dry_run=false` requests organizer container redeploy for the confirmed SHA (Actions secrets only; no SSH).
 - Starter bug: empty `restoreTarget` camelCase input; fixed to `restore_target`. Cite log: `Log line proving restore target: restore_target=<sha>`.
 - Judge answer: recreate directories, then env placeholders, then container config, then bind latest confirmed artifact/image, then start/redeploy service via Actions, then verify `/health` + `/status`.
+
+### T17 low-downtime release strategy
+
+- Script: `scripts/low-downtime-release.sh` — prepare `releases/<sha>` first, health-check candidate, switch `current` only after success.
+- Workflow: `.github/workflows/low-downtime-release.yml` (dry-run rehearsal + failure proof).
+- Docs: `docs/low-downtime-release.md`.
+- Failure path: `RELEASE_MODE=fail-health` refuses switch; previous `current` and known-good directory remain.
+- Evidence artifact: `t17-low-downtime-<sha>` (manifest + log).
+- Judge answer: traffic switches only when `current` symlink is atomically updated; bad health exits before that step.

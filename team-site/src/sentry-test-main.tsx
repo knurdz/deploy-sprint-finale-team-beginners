@@ -1,13 +1,13 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { initSentry } from './sentry';
-import { App } from './App';
+import { SentryTestPage } from './pages/SentryTestPage';
 import './styles.css';
 
 initSentry();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <SentryTestPage />
   </React.StrictMode>,
 );

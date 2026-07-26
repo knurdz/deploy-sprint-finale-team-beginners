@@ -5,6 +5,7 @@ portal/.portal-data
 .env
 .env.*
 !.env.local.example
+!.env.example
 !team-site/.env.example
 !portal/.env.local.example
 npm-debug.log*
