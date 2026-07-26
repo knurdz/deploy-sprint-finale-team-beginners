@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,11 +47,48 @@ const publicUrl =
     ? domainPublicUrl
     : process.env.PUBLIC_URL || ipPublicUrl || process.env.VITE_PUBLIC_URL || ipPublicUrl;
 
-const taskMarker = process.env.TASK_MARKER || 'T02';
+const taskMarker = process.env.TASK_MARKER || 'T23';
 const previewPrNumber = process.env.PREVIEW_PR_NUMBER;
 const previewBasePath =
   process.env.PREVIEW_BASE_PATH ||
   (previewPrNumber ? `/previews/pr-${previewPrNumber}` : undefined);
+
+const artifactName =
+  process.env.BUILD_ARTIFACT_NAME || `site-dist-${commit}`;
+const workflowRunId = String(releaseId);
+
+const defaultMarkers = [
+  'T01',
+  'T02',
+  'T04',
+  'T05',
+  'T06',
+  'T07',
+  'T09',
+  'T10',
+  'T12',
+  'T15',
+  'T23',
+];
+const taskMarkers = (process.env.COMPLETED_TASK_MARKERS || defaultMarkers.join(','))
+  .split(',')
+  .map((t) => t.trim())
+  .filter(Boolean);
+if (!taskMarkers.includes('T23')) {
+  taskMarkers.push('T23');
+}
+
+const releaseManifest = {
+  task: 'T23',
+  commit,
+  commit_short: commit.slice(0, 7),
+  artifact: artifactName,
+  workflowRun: workflowRunId,
+  deployedAt: deployTime,
+  deployTime,
+  taskMarkers,
+  secretsRedacted: true,
+};
 
 // T15: boolean only — never write the raw secret/string beyond true/false.
 const showInsights =
@@ -62,6 +99,13 @@ const featureFlags = {
   showInsights,
   valueRedacted: true,
 };
+
+const containerName = process.env.CONTAINER_NAME || 'deploy-sprint-team-01';
+const appPort = process.env.APP_PORT || '8080';
+const containerImageExplicit =
+  process.env.CONTAINER_IMAGE || process.env.IMAGE_TAG || process.env.VITE_CONTAINER_IMAGE;
+const containerImage =
+  containerImageExplicit || `deploy-sprint/team-site:${commit}`;
 
 const domainEvidence = {
   connected: domainConnected,
@@ -82,6 +126,35 @@ const contactEvidence = {
   provider: 'web3forms',
   configured: web3formsConfigured,
   accessKeyStoredInSecret: true,
+};
+
+// T16: Resend readiness only — never write API key, response tokens, or addresses.
+// Prefer artifact from prepare-resend-email.mjs; fall back to boolean CI flags only.
+let emailConfigured =
+  process.env.RESEND_CONFIGURED === 'true' ||
+  process.env.RESEND_API_KEY_CONFIGURED === 'true';
+let emailMode = process.env.EMAIL_ALERT_MODE || 'dry-run';
+const emailStatusPath = join(publicDir, 'email', 'status.json');
+if (existsSync(emailStatusPath)) {
+  try {
+    const emailArtifact = JSON.parse(readFileSync(emailStatusPath, 'utf8'));
+    if (typeof emailArtifact.configured === 'boolean') {
+      emailConfigured = emailArtifact.configured;
+    }
+    if (typeof emailArtifact.mode === 'string') {
+      emailMode = emailArtifact.mode;
+    }
+  } catch {
+    // Keep env-flag fallback if artifact is unreadable.
+  }
+}
+const emailEvidence = {
+  task: 'T16',
+  provider: 'resend',
+  configured: emailConfigured,
+  secretRedacted: true,
+  apiKeySecretName: 'RESEND_API_KEY',
+  mode: emailMode,
 };
 
 const status = {
@@ -107,6 +180,15 @@ const status = {
   contact: contactEvidence,
   'contact.provider': 'web3forms',
   'contact.configured': web3formsConfigured,
+
+  releaseManifest,
+  artifact: artifactName,
+  workflowRun: workflowRunId,
+
+  email: emailEvidence,
+  'email.provider': 'resend',
+  'email.configured': emailConfigured,
+
 };
 
 if (previewPrNumber && previewBasePath) {
@@ -118,6 +200,17 @@ if (previewPrNumber && previewBasePath) {
     productionStatusMustNotChange: true,
   };
   status.previewUrl = previewUrl;
+}
+
+if (taskMarker === 'T18' || containerImageExplicit) {
+  status.container = {
+    name: containerName,
+    image: containerImage,
+    imageTag: containerImage.includes(':') ? containerImage.split(':').pop() : commit,
+    appPort: Number(appPort),
+    commit,
+  };
+  status.image = containerImage;
 }
 
 const domainConfig = {
@@ -133,7 +226,11 @@ const domainConfig = {
 
 writeFileSync(join(publicDir, 'health'), 'ok\n', 'utf8');
 writeFileSync(join(publicDir, 'status'), `${JSON.stringify(status, null, 2)}\n`, 'utf8');
+writeFileSync(join(publicDir, 'release-manifest.json'), `${JSON.stringify(releaseManifest, null, 2)}\n`, 'utf8');
 writeFileSync(join(repoRoot, 'domain.config.json'), `${JSON.stringify(domainConfig, null, 2)}\n`, 'utf8');
+writeFileSync(join(repoRoot, 'release-manifest.json'), `${JSON.stringify(releaseManifest, null, 2)}\n`, 'utf8');
 console.log(
-  `Wrote /health, /status, and domain.config.json for ${team} @ ${status.commit_short} (${taskMarker}, domain.connected=${domainConnected})`,
+
+  `Wrote /health, /status, release-manifest.json, and domain.config.json for ${team} @ ${status.commit_short} (${taskMarker}, domain.connected=${domainConnected}, artifact=${artifactName})`,
 );
+

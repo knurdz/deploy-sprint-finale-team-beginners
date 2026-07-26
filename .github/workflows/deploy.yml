@@ -11,6 +11,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      smoke_mode:
+        description: "live = curl PUBLIC_URL after deploy request; fallback = build dist and inspect artifacts"
+        required: false
+        type: choice
+        options:
+          - live
+          - fallback
+        default: live
 
 permissions:
   contents: read
@@ -30,7 +39,7 @@ jobs:
         !contains(github.event.workflow_run.head_commit.message, '[skip deploy]')
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - name: Confirm CI gate passed
@@ -49,6 +58,7 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           MANUAL_SHA: ${{ github.sha }}
           MANUAL_RUN_ID: ${{ github.run_id }}
+          DISPATCH_SMOKE_MODE: ${{ github.event.inputs.smoke_mode || 'live' }}
         run: |
           set -euo pipefail
 
@@ -56,10 +66,21 @@ jobs:
             sha="$MANUAL_SHA"
             branch="main"
             source_run_id="$MANUAL_RUN_ID"
+            smoke_mode="$DISPATCH_SMOKE_MODE"
+            if [ "$smoke_mode" = "fallback" ]; then
+              skip_deploy="true"
+            else
+              skip_deploy="false"
+            fi
           else
+            # Starter bug used github.sha here (wrong on workflow_run). Fixed: head_sha.
             sha="$WORKFLOW_RUN_SHA"
             branch="$WORKFLOW_RUN_BRANCH"
             source_run_id="$WORKFLOW_RUN_ID"
+            # Always request organizer publish on CI success.
+            skip_deploy="false"
+            # Smoke uses artifact fallback by default (async VPS). Use workflow_dispatch live after rollout.
+            smoke_mode="fallback"
           fi
 
           if [ "$branch" != "main" ]; then
@@ -67,13 +88,20 @@ jobs:
             exit 1
           fi
 
+          repo="${GITHUB_REPOSITORY,,}"
+          image="ghcr.io/${repo}/team-site:${sha}"
+
           {
             echo "sha=$sha"
             echo "branch=$branch"
             echo "source_run_id=$source_run_id"
+            echo "container_image=$image"
           } >> "$GITHUB_OUTPUT"
 
+          echo "Resolved deploy sha=$sha smoke_mode=$smoke_mode skip_deploy=$skip_deploy"
+
       - name: Authorize deploy with private token (server-side only)
+        if: steps.request.outputs.skip_deploy != 'true'
         env:
           PRIVATE_DEPLOY_TOKEN: ${{ secrets.PRIVATE_DEPLOY_TOKEN }}
         run: |
@@ -84,7 +112,7 @@ jobs:
           fi
           echo "Deploy authorized using masked PRIVATE_DEPLOY_TOKEN."
 
-      - name: Request deploy from organizer deployer
+      - name: Request container deploy from organizer deployer
         env:
           DEPLOYER_DISPATCH_TOKEN: ${{ secrets.DEPLOYER_DISPATCH_TOKEN }}
           DEPLOYER_REPO: knurdz/deploy-sprint-deployer
@@ -92,6 +120,10 @@ jobs:
           TEAM_SHA: ${{ steps.request.outputs.sha }}
           TEAM_BRANCH: ${{ steps.request.outputs.branch }}
           SOURCE_RUN_ID: ${{ steps.request.outputs.source_run_id }}
+          CONTAINER_IMAGE: ${{ steps.request.outputs.container_image }}
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME || 'deploy-sprint-team-01' }}
+          APP_PORT: ${{ vars.APP_PORT || '8080' }}
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
         run: |
           set -euo pipefail
 
@@ -112,11 +144,18 @@ jobs:
                   "sha": os.environ["TEAM_SHA"],
                   "branch": os.environ["TEAM_BRANCH"],
                   "source_run_id": os.environ["SOURCE_RUN_ID"],
+                  "deploy_mode": "container",
+                  "container_name": os.environ.get("CONTAINER_NAME", "deploy-sprint-team-01"),
+                  "app_port": os.environ.get("APP_PORT", "8080"),
+                  "image": os.environ["CONTAINER_IMAGE"],
+                  "public_url": os.environ.get("PUBLIC_URL", ""),
               },
           }
 
           print(json.dumps(payload))
           PY
+
+          echo "T18 container deploy request: image=${CONTAINER_IMAGE} name=${CONTAINER_NAME} port=${APP_PORT}"
 
           curl --fail-with-body --show-error --silent \
             -X POST \
