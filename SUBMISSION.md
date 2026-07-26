@@ -51,7 +51,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T14 | [T14] Production Docker Image | `team-site/Dockerfile` multi-stage; CI `docker-image-evidence-<sha>` | tag + image id; nginx serves `dist`; lockfile `npm ci` |
 | T15 | [T15] Runtime Feature Flag | `/status` `featureFlags` + Insights UI | `FEATURE_SHOW_INSIGHTS` secret/var → `VITE_FEATURE_SHOW_INSIGHTS`; no hardcoded flag |
 | T16 | [T16] Resend Email Alerts | `/status` email + `/email/status.json` | Secret name only: `RESEND_API_KEY`; CI dry-run evidence |
-| T17 |  |  |  |
+| T17 | [T17] Low-Downtime Release Strategy | `scripts/low-downtime-release.sh` + `low-downtime-release.yml` | Symlink `current` only after candidate health; keep previous on failure |
 | T18 |  | `/status` `container.image`, CI + deploy logs | `docs/container-deploy.md`; GHCR SHA tag + organizer deployer |
 | T19 |  |  |  |
 | T20 |  |  |  |
@@ -142,4 +142,13 @@ List anything judges should know without exposing credentials or private infrast
 - Retry-safe ops: create-or-reuse `releases/<sha>`, atomic switch of `current` symlink/dir.
 - Evidence: two dry-run passes in deploy job (pass 2 must log reuse) + lock-busy proof; artifact `t28-idempotent-deploy-<sha>`.
 - Verify: open deploy Actions run logs / download artifact; confirm second pass reuses the same target.
+
+### T17 low-downtime release strategy
+
+- Script: `scripts/low-downtime-release.sh` — prepare `releases/<sha>` first, health-check candidate, switch `current` only after success.
+- Workflow: `.github/workflows/low-downtime-release.yml` (dry-run rehearsal + failure proof).
+- Docs: `docs/low-downtime-release.md`.
+- Failure path: `RELEASE_MODE=fail-health` refuses switch; previous `current` and known-good directory remain.
+- Evidence artifact: `t17-low-downtime-<sha>` (manifest + log).
+- Judge answer: traffic switches only when `current` symlink is atomically updated; bad health exits before that step.
 

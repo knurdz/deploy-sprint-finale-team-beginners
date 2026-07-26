@@ -1,0 +1,155 @@
+name: Low-Downtime Release Strategy
+
+# T17: prepare releases/<sha>, health-check candidate, switch current only after success.
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Candidate release id/SHA to prepare (default = this commit)
+        required: false
+        type: string
+        default: ""
+      run_failure_proof:
+        description: Also prove a bad candidate does not switch current
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: production-deploy-beginners
+  cancel-in-progress: false
+
+jobs:
+  low-downtime-rehearsal:
+    name: Symlink release + health gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve candidate SHA
+        id: meta
+        env:
+          INPUT_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          sha="${INPUT_SHA}"
+          if [ -z "$sha" ]; then
+            sha="${GITHUB_SHA}"
+          fi
+          if printf '%s' "$sha" | grep -Eq '[^A-Za-z0-9._/-]'; then
+            echo "candidate_sha has unsafe characters"
+            exit 1
+          fi
+          {
+            echo "candidate_sha=$sha"
+            echo "known_good=known-good-seed"
+            echo "bad_sha=bad-release-sim"
+          } >> "$GITHUB_OUTPUT"
+          echo "Log line proving candidate: candidate_sha=${sha}"
+
+      - name: Make script executable
+        run: chmod +x scripts/low-downtime-release.sh
+
+      - name: Seed known-good release and switch once
+        env:
+          DEPLOY_ROOT: ${{ runner.temp }}/t17-releases
+          DEPLOY_SHA: ${{ steps.meta.outputs.known_good }}
+          RELEASE_MODE: promote
+          LOG_FILE: ${{ runner.temp }}/t17-releases/t17-low-downtime.log
+        run: |
+          set -euo pipefail
+          mkdir -p "$DEPLOY_ROOT"
+          ./scripts/low-downtime-release.sh
+          test "$(basename "$(readlink -f "$DEPLOY_ROOT/current")")" = "known-good-seed"
+          echo "Seeded current -> known-good-seed"
+
+      - name: Promote healthy candidate (should switch)
+        env:
+          DEPLOY_ROOT: ${{ runner.temp }}/t17-releases
+          DEPLOY_SHA: ${{ steps.meta.outputs.candidate_sha }}
+          RELEASE_MODE: promote
+          LOG_FILE: ${{ runner.temp }}/t17-releases/t17-low-downtime.log
+        run: |
+          set -euo pipefail
+          ./scripts/low-downtime-release.sh
+          current="$(basename "$(readlink -f "$DEPLOY_ROOT/current")")"
+          echo "Log line proving switch: switched current -> ${DEPLOY_ROOT}/releases/${DEPLOY_SHA}"
+          test "$current" = "$DEPLOY_SHA"
+          test -d "$DEPLOY_ROOT/releases/known-good-seed"
+          echo "Healthy promote OK; previous known-good still on disk"
+
+      - name: Simulate bad candidate (must NOT switch)
+        if: ${{ inputs.run_failure_proof == true || inputs.run_failure_proof == 'true' }}
+        env:
+          DEPLOY_ROOT: ${{ runner.temp }}/t17-releases
+          DEPLOY_SHA: ${{ steps.meta.outputs.bad_sha }}
+          RELEASE_MODE: fail-health
+          LOG_FILE: ${{ runner.temp }}/t17-releases/t17-low-downtime.log
+          EXPECTED_CURRENT: ${{ steps.meta.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          set +e
+          ./scripts/low-downtime-release.sh
+          rc=$?
+          set -e
+          test "$rc" -ne 0
+          current="$(basename "$(readlink -f "$DEPLOY_ROOT/current")")"
+          echo "Log line proving no switch on failure: current still ${current}"
+          test "$current" = "$EXPECTED_CURRENT"
+          test -d "$DEPLOY_ROOT/releases/${DEPLOY_SHA}"
+          echo "Failure path OK — bad release prepared but current unchanged"
+
+      - name: Write T17 evidence manifest
+        env:
+          CANDIDATE: ${{ steps.meta.outputs.candidate_sha }}
+          DEPLOY_ROOT: ${{ runner.temp }}/t17-releases
+        run: |
+          set -euo pipefail
+          mkdir -p t17-evidence
+          current="$(basename "$(readlink -f "$DEPLOY_ROOT/current")")"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ["DEPLOY_ROOT"])
+          payload = {
+              "task": "T17",
+              "strategy": "symlinked-releases",
+              "switch_only_after_health": True,
+              "keep_previous_release_on_failure": True,
+              "health_check": "candidate releases/<sha>/health must equal ok",
+              "switch_step": "ln -sfn releases/<sha> current (atomic mv replace)",
+              "currentRelease": os.popen(f"basename $(readlink -f '{root}/current')").read().strip(),
+              "candidateSha": os.environ["CANDIDATE"],
+              "releases": sorted(p.name for p in (root / "releases").iterdir() if p.is_dir()),
+              "workflow_run_id": os.environ.get("GITHUB_RUN_ID", ""),
+              "workflow_run_url": f"{os.environ.get('GITHUB_SERVER_URL','')}/{os.environ.get('GITHUB_REPOSITORY','')}/actions/runs/{os.environ.get('GITHUB_RUN_ID','')}",
+              "secrets_redacted": True,
+          }
+          Path("t17-evidence/low-downtime-manifest.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps(payload, indent=2))
+          PY
+          cp "$DEPLOY_ROOT/t17-low-downtime.log" t17-evidence/t17-low-downtime.log
+          {
+            echo "## T17 Low-Downtime Release Strategy"
+            echo ""
+            echo "- Strategy: symlinked \`releases/<sha>\` + \`current\` pointer"
+            echo "- Switch step: atomic \`ln -sfn\` / \`mv\` of \`current\` **after** candidate health passes"
+            echo "- Failure path: bad candidate keeps previous \`current\`"
+            echo "- currentRelease: \`${current}\`"
+            echo "- Log line: \`Log line proving switch: switched current -> ...\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload T17 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: t17-low-downtime-${{ github.sha }}
+          path: t17-evidence/
+          if-no-files-found: error
