@@ -15,6 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node 20
+        id: setup_node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -40,6 +41,41 @@ jobs:
         run: npm ci
         working-directory: team-site
 
+      - name: Dependency cache and audit summary
+        working-directory: team-site
+        run: |
+          set -euo pipefail
+          {
+            echo "## T12 Fast Dependency Pipeline"
+            echo "- cache: npm"
+            echo "- cache-dependency-path: team-site/package-lock.json"
+            echo "- cache-hit: ${{ steps.setup_node.outputs.cache-hit }}"
+            echo "- install command: npm ci (always runs after cache restore)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          set +e
+          npm audit --omit=dev
+          audit_code=$?
+          set -e
+          echo "- npm audit exit code: ${audit_code} (documented only; does not fail the job)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Cache hit=${{ steps.setup_node.outputs.cache-hit }}; npm ci completed; audit exit=${audit_code}"
+
+      - name: Prepare Web3Forms contact integration
+        env:
+          WEB3FORMS_ACCESS_KEY: ${{ secrets.WEB3FORMS_ACCESS_KEY }}
+        run: node scripts/prepare-web3forms.mjs
+        working-directory: team-site
+
+      - name: Verify WEB3FORMS_ACCESS_KEY secret
+        env:
+          WEB3FORMS_ACCESS_KEY: ${{ secrets.WEB3FORMS_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEB3FORMS_ACCESS_KEY:-}" ]; then
+            echo "WEB3FORMS_ACCESS_KEY is not configured."
+            exit 1
+          fi
+          echo "WEB3FORMS_ACCESS_KEY is configured for Web3Forms (value redacted)."
+
       - name: Build team-site
         env:
           TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
@@ -55,14 +91,18 @@ jobs:
           DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
           DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
           DOMAIN_CONNECTED: "true"
-          TASK_MARKER: T06
+          TASK_MARKER: T15
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret.outputs.configured }}
+          FEATURE_SHOW_INSIGHTS: ${{ secrets.FEATURE_SHOW_INSIGHTS || vars.FEATURE_SHOW_INSIGHTS || 'false' }}
+          VITE_FEATURE_SHOW_INSIGHTS: ${{ secrets.FEATURE_SHOW_INSIGHTS || vars.FEATURE_SHOW_INSIGHTS || 'false' }}
           VITE_PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
           VITE_TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
           VITE_COMMIT_SHA: ${{ github.sha }}
           VITE_RELEASE_ID: ${{ github.run_id }}
+          WEB3FORMS_CONFIGURED: "true"
+          WEB3FORMS_ACCESS_KEY_CONFIGURED: "true"
         run: npm run build
         working-directory: team-site
 
@@ -83,6 +123,7 @@ jobs:
             echo "- Install: \`npm ci\` (team-site lockfile)"
             echo "- Build: \`npm run build\` in \`team-site/\`"
             echo "- Artifact: \`site-dist-${GITHUB_SHA}\` from \`team-site/dist\`"
+            echo "- Feature flag: FEATURE_SHOW_INSIGHTS (value redacted; boolean only in /status)"
             echo "- Deploy is gated on this workflow succeeding on \`main\`"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "CI gate passed for commit ${GITHUB_SHA}."

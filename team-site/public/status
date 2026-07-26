@@ -1,10 +1,10 @@
 {
   "team": "BEGINNERS",
   "team_slug": "beginners",
-  "commit": "pending-ci-build",
-  "commit_short": "pending",
-  "release_id": "pending",
-  "deploy_time": "pending-ci-build",
+  "commit": "local-dev",
+  "commit_short": "local-d",
+  "release_id": "local-1785053381022",
+  "deploy_time": "2026-07-26T08:09:41.023Z",
   "public_url": "https://beginners.deploysprint-finals.knurdz.org",
   "public_url_mode": "domain",
   "task": "T02",
@@ -17,13 +17,20 @@
     "recordTarget": "20.114.32.177",
     "domainPublicUrl": "https://beginners.deploysprint-finals.knurdz.org",
     "ipPublicUrl": "http://20.114.32.177",
-    "verifiedAt": "pending-ci-build"
+    "verifiedAt": "2026-07-26T08:09:41.023Z"
   },
   "domain.connected": true,
   "assignedDomain": "beginners.deploysprint-finals.knurdz.org",
   "config": {
-    "publicDeployLabel": "BEGINNERS-DEPLOY-LABEL",
-    "privateDeployTokenConfigured": true,
+    "publicDeployLabel": "unset-public-label",
+    "privateDeployTokenConfigured": false,
     "secretsRedacted": true
-  }
+  },
+  "contact": {
+    "provider": "web3forms",
+    "configured": false,
+    "accessKeyStoredInSecret": true
+  },
+  "contact.provider": "web3forms",
+  "contact.configured": false
 }

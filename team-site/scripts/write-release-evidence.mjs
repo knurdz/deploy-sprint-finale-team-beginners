@@ -48,6 +48,20 @@ const publicUrl =
     : process.env.PUBLIC_URL || ipPublicUrl || process.env.VITE_PUBLIC_URL || ipPublicUrl;
 
 const taskMarker = process.env.TASK_MARKER || 'T02';
+const previewPrNumber = process.env.PREVIEW_PR_NUMBER;
+const previewBasePath =
+  process.env.PREVIEW_BASE_PATH ||
+  (previewPrNumber ? `/previews/pr-${previewPrNumber}` : undefined);
+
+// T15: boolean only — never write the raw secret/string beyond true/false.
+const showInsights =
+  process.env.FEATURE_SHOW_INSIGHTS === 'true' ||
+  process.env.VITE_FEATURE_SHOW_INSIGHTS === 'true';
+const featureFlags = {
+  task: 'T15',
+  showInsights,
+  valueRedacted: true,
+};
 
 const domainEvidence = {
   connected: domainConnected,
@@ -58,6 +72,16 @@ const domainEvidence = {
   domainPublicUrl,
   ipPublicUrl,
   verifiedAt: verificationTime,
+};
+
+const web3formsConfigured =
+  process.env.WEB3FORMS_CONFIGURED === 'true' ||
+  process.env.WEB3FORMS_ACCESS_KEY_CONFIGURED === 'true';
+
+const contactEvidence = {
+  provider: 'web3forms',
+  configured: web3formsConfigured,
+  accessKeyStoredInSecret: true,
 };
 
 const status = {
@@ -79,7 +103,22 @@ const status = {
     privateDeployTokenConfigured: privateTokenConfigured,
     secretsRedacted: true,
   },
+  featureFlags,
+  contact: contactEvidence,
+  'contact.provider': 'web3forms',
+  'contact.configured': web3formsConfigured,
 };
+
+if (previewPrNumber && previewBasePath) {
+  const previewUrl = `${publicUrl.replace(/\/$/, '')}${previewBasePath}/`;
+  status.preview = {
+    pr: Number(previewPrNumber),
+    previewUrl,
+    previewBasePath,
+    productionStatusMustNotChange: true,
+  };
+  status.previewUrl = previewUrl;
+}
 
 const domainConfig = {
   assignedDomain,
