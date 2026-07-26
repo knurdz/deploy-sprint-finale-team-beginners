@@ -2,8 +2,6 @@ name: Request Organizer Deploy
 
 # T06: deployment runs only after the CI workflow succeeds on main (workflow_run).
 # T19: post-deploy smoke-test verifies /, /health, /status commit, and a task page.
-# AI-REVIEW-MARKER: participant must manually remove this marker
-# PR-AGENT-MARKER: participant must manually remove this marker
 
 on:
   workflow_run:
