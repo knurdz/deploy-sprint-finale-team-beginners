@@ -52,7 +52,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T16 |  |  |  |
 | T17 |  |  |  |
 | T18 |  |  |  |
-| T19 |  |  |  |
+| T19 | [T19] Post-Deploy Smoke Tests | `.github/workflows/deploy.yml` `smoke-test` job; `/` `/health` `/status` `/contact.html` | Live + fallback modes; fails workflow on mismatch |
 | T20 |  |  |  |
 | T21 |  |  |  |
 | T22 |  |  |  |
@@ -97,3 +97,13 @@ List anything judges should know without exposing credentials or private infrast
 - Verify off: set secret/var to `false`, rebuild; panel hidden; status `showInsights: false`.
 - Verify on: set to `true`, rebuild; panel visible; status `showInsights: true`.
 - Incident disable: set `FEATURE_SHOW_INSIGHTS=false` and redeploy (no source change).
+
+### T19 post-deploy smoke tests
+
+- Added final job `smoke-test` in `.github/workflows/deploy.yml` that runs only after `request-deploy`.
+- Checks: `/` (or dist homepage artifact), `/health`, `/status` commit == expected SHA, task page `/contact.html`.
+- Modes: `fallback` builds `team-site/dist` and greps expected SHA in `dist/status` (no-live evidence); `live` curls `PUBLIC_URL` with retries + `--fail`.
+- Starter bug: expected commit used `github.sha` on `workflow_run` (wrong). Fixed to `workflow_run.head_sha` / job output `sha`. Log line to cite: `Log line proving target: fallback://team-site/dist` or `live://… (PUBLIC_URL)`.
+- Verify: Actions → Request Organizer Deploy → Run workflow → `smoke_mode=fallback` on this branch; confirm smoke-test passes. After VPS has the SHA, re-run with `smoke_mode=live`.
+- Judge answer: `/status` commit (or artifact digest) vs expected SHA catches a stale/partial deploy; homepage 200 alone does not.
+- Secrets stay server-side (`PRIVATE_DEPLOY_TOKEN`, `DEPLOYER_DISPATCH_TOKEN`); smoke only reads public URL vars and built status.

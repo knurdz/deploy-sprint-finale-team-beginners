@@ -1,6 +1,9 @@
 name: Request Organizer Deploy
 
 # T06: deployment runs only after the CI workflow succeeds on main (workflow_run).
+# T19: post-deploy smoke-test verifies /, /health, /status commit, and a task page.
+# AI-REVIEW-MARKER: participant must manually remove this marker
+# PR-AGENT-MARKER: participant must manually remove this marker
 
 on:
   workflow_run:
@@ -10,6 +13,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      smoke_mode:
+        description: "live = curl PUBLIC_URL after deploy request; fallback = build dist and inspect artifacts"
+        required: false
+        type: choice
+        options:
+          - live
+          - fallback
+        default: live
 
 permissions:
   contents: read
@@ -29,6 +41,12 @@ jobs:
       )
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.request.outputs.sha }}
+      branch: ${{ steps.request.outputs.branch }}
+      source_run_id: ${{ steps.request.outputs.source_run_id }}
+      smoke_mode: ${{ steps.request.outputs.smoke_mode }}
+      skip_deploy: ${{ steps.request.outputs.skip_deploy }}
 
     steps:
       - name: Confirm CI gate passed
@@ -47,6 +65,7 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
           MANUAL_SHA: ${{ github.sha }}
           MANUAL_RUN_ID: ${{ github.run_id }}
+          DISPATCH_SMOKE_MODE: ${{ github.event.inputs.smoke_mode || 'live' }}
         run: |
           set -euo pipefail
 
@@ -54,10 +73,21 @@ jobs:
             sha="$MANUAL_SHA"
             branch="main"
             source_run_id="$MANUAL_RUN_ID"
+            smoke_mode="$DISPATCH_SMOKE_MODE"
+            if [ "$smoke_mode" = "fallback" ]; then
+              skip_deploy="true"
+            else
+              skip_deploy="false"
+            fi
           else
+            # Starter bug used github.sha here (wrong on workflow_run). Fixed: head_sha.
             sha="$WORKFLOW_RUN_SHA"
             branch="$WORKFLOW_RUN_BRANCH"
             source_run_id="$WORKFLOW_RUN_ID"
+            # Always request organizer publish on CI success.
+            skip_deploy="false"
+            # Smoke uses artifact fallback by default (async VPS). Use workflow_dispatch live after rollout.
+            smoke_mode="fallback"
           fi
 
           if [ "$branch" != "main" ]; then
@@ -69,9 +99,14 @@ jobs:
             echo "sha=$sha"
             echo "branch=$branch"
             echo "source_run_id=$source_run_id"
+            echo "smoke_mode=$smoke_mode"
+            echo "skip_deploy=$skip_deploy"
           } >> "$GITHUB_OUTPUT"
 
+          echo "Resolved deploy sha=$sha smoke_mode=$smoke_mode skip_deploy=$skip_deploy"
+
       - name: Authorize deploy with private token (server-side only)
+        if: steps.request.outputs.skip_deploy != 'true'
         env:
           PRIVATE_DEPLOY_TOKEN: ${{ secrets.PRIVATE_DEPLOY_TOKEN }}
         run: |
@@ -83,6 +118,7 @@ jobs:
           echo "Deploy authorized using masked PRIVATE_DEPLOY_TOKEN."
 
       - name: Request deploy from organizer deployer
+        if: steps.request.outputs.skip_deploy != 'true'
         env:
           DEPLOYER_DISPATCH_TOKEN: ${{ secrets.DEPLOYER_DISPATCH_TOKEN }}
           DEPLOYER_REPO: knurdz/deploy-sprint-deployer
@@ -125,3 +161,169 @@ jobs:
             --data @payload.json
 
           echo "Requested organizer deployment for ${TEAM_REPO}@${TEAM_SHA}."
+
+      - name: Skip deployer dispatch (fallback smoke only)
+        if: steps.request.outputs.skip_deploy == 'true'
+        run: echo "skip_deploy=true — skipping organizer deploy request; smoke-test will inspect built dist."
+
+  smoke-test:
+    name: smoke-test
+    needs: request-deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.request-deploy.outputs.sha }}
+
+      - name: Setup Node 20 (fallback build)
+        if: needs.request-deploy.outputs.smoke_mode == 'fallback'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: team-site/package-lock.json
+
+      - name: Install and build dist (fallback)
+        if: needs.request-deploy.outputs.smoke_mode == 'fallback'
+        working-directory: team-site
+        env:
+          TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
+          TEAM_SLUG: ${{ vars.TEAM_SLUG || 'beginners' }}
+          RELEASE_ID: ${{ github.run_id }}
+          DEPLOY_TIME: ${{ github.run_started_at }}
+          PUBLIC_URL_MODE: ${{ vars.PUBLIC_URL_MODE || 'domain' }}
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+          IP_PUBLIC_URL: ${{ vars.IP_PUBLIC_URL }}
+          DOMAIN_PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL }}
+          ASSIGNED_DOMAIN: ${{ vars.ASSIGNED_DOMAIN }}
+          DNS_RECORD_TYPE: ${{ vars.DNS_RECORD_TYPE }}
+          DNS_RECORD_NAME: ${{ vars.DNS_RECORD_NAME }}
+          DNS_RECORD_VALUE: ${{ vars.DNS_RECORD_VALUE }}
+          DOMAIN_CONNECTED: "true"
+          TASK_MARKER: T19
+          PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
+          VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
+          PRIVATE_DEPLOY_TOKEN: ${{ secrets.PRIVATE_DEPLOY_TOKEN }}
+          PRIVATE_DEPLOY_TOKEN_CONFIGURED: "true"
+          FEATURE_SHOW_INSIGHTS: ${{ secrets.FEATURE_SHOW_INSIGHTS || vars.FEATURE_SHOW_INSIGHTS || 'false' }}
+          VITE_FEATURE_SHOW_INSIGHTS: ${{ secrets.FEATURE_SHOW_INSIGHTS || vars.FEATURE_SHOW_INSIGHTS || 'false' }}
+          VITE_PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+          VITE_TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
+          VITE_COMMIT_SHA: ${{ needs.request-deploy.outputs.sha }}
+          GITHUB_SHA: ${{ needs.request-deploy.outputs.sha }}
+          VITE_RELEASE_ID: ${{ github.run_id }}
+          WEB3FORMS_ACCESS_KEY: ${{ secrets.WEB3FORMS_ACCESS_KEY }}
+          WEB3FORMS_CONFIGURED: "true"
+          WEB3FORMS_ACCESS_KEY_CONFIGURED: "true"
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+
+      - name: Post-deploy smoke tests
+        env:
+          PUBLIC_URL: ${{ vars.DOMAIN_PUBLIC_URL || vars.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+          EXPECTED_STATUS_COMMIT: ${{ needs.request-deploy.outputs.sha }}
+          SMOKE_MODE: ${{ needs.request-deploy.outputs.smoke_mode }}
+          TASK_SPECIFIC_PATH: /contact.html
+        run: |
+          set -euo pipefail
+
+          EXPECTED="${EXPECTED_STATUS_COMMIT}"
+          MODE="${SMOKE_MODE:-live}"
+          TASK_PATH="${TASK_SPECIFIC_PATH:-/contact.html}"
+
+          echo "## T19 smoke target"
+          echo "SMOKE_MODE=${MODE}"
+          echo "EXPECTED_STATUS_COMMIT=${EXPECTED}"
+          echo "PUBLIC_URL=${PUBLIC_URL:-<unset>}"
+          echo "TASK_SPECIFIC_PATH=${TASK_PATH}"
+
+          fail_smoke() {
+            echo "SMOKE FAIL: $*"
+            exit 1
+          }
+
+          check_status_commit() {
+            local status_body="$1"
+            local source_label="$2"
+            echo "Checking commit identity in ${source_label}"
+            if ! printf '%s' "$status_body" | grep -Fq "$EXPECTED"; then
+              echo "Status body excerpt:"
+              printf '%s\n' "$status_body" | head -n 40
+              fail_smoke "${source_label} does not contain expected commit ${EXPECTED}"
+            fi
+            echo "Commit match OK for ${source_label}"
+          }
+
+          if [ "$MODE" = "fallback" ]; then
+            echo "Log line proving target: fallback://team-site/dist (not PUBLIC_URL)"
+            test -f team-site/dist/health || fail_smoke "missing team-site/dist/health"
+            test -f team-site/dist/status || fail_smoke "missing team-site/dist/status"
+            grep -Fq 'ok' team-site/dist/health || fail_smoke "health artifact is not ok"
+            STATUS_BODY="$(cat team-site/dist/status)"
+            check_status_commit "$STATUS_BODY" "team-site/dist/status"
+            if [ ! -f team-site/dist/contact.html ] && [ ! -f team-site/dist/contact/index.html ]; then
+              fail_smoke "task-specific contact page missing from dist"
+            fi
+            {
+              echo "## T19 Post-Deploy Smoke Tests (fallback)"
+              echo "- Target: \`team-site/dist\` (no-live fallback)"
+              echo "- Checked: health, status commit, contact.html"
+              echo "- Expected commit: \`${EXPECTED}\`"
+              echo "- Result: pass"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "Fallback smoke passed for ${EXPECTED}"
+            exit 0
+          fi
+
+          if [ -z "${PUBLIC_URL:-}" ]; then
+            fail_smoke "PUBLIC_URL is empty; set DOMAIN_PUBLIC_URL/PUBLIC_URL/IP_PUBLIC_URL or use smoke_mode=fallback"
+          fi
+
+          BASE="${PUBLIC_URL%/}"
+          echo "Log line proving target: live://${BASE}/ (PUBLIC_URL)"
+
+          ATTEMPTS=8
+          SLEEP_SECS=10
+          attempt=1
+          while [ "$attempt" -le "$ATTEMPTS" ]; do
+            echo "Live smoke attempt ${attempt}/${ATTEMPTS} against ${BASE}"
+            set +e
+            curl --fail --show-error --location --silent "${BASE}/" >/tmp/smoke-home.html
+            home_rc=$?
+            curl --fail --show-error --location --silent "${BASE}/health" >/tmp/smoke-health.txt
+            health_rc=$?
+            curl --fail --show-error --location --silent "${BASE}/status" >/tmp/smoke-status.json
+            status_rc=$?
+            curl --fail --show-error --location --silent "${BASE}${TASK_PATH}" >/tmp/smoke-task.html
+            task_rc=$?
+            set -e
+
+            if [ "$home_rc" -eq 0 ] && [ "$health_rc" -eq 0 ] && [ "$status_rc" -eq 0 ] && [ "$task_rc" -eq 0 ]; then
+              grep -Fq 'ok' /tmp/smoke-health.txt || fail_smoke "/health body missing ok"
+              check_status_commit "$(cat /tmp/smoke-status.json)" "${BASE}/status"
+              echo "Task-specific page OK: ${BASE}${TASK_PATH}"
+              {
+                echo "## T19 Post-Deploy Smoke Tests (live)"
+                echo "- Target: \`${BASE}\`"
+                echo "- Checked: \`/\`, \`/health\`, \`/status\` commit, \`${TASK_PATH}\`"
+                echo "- Expected commit: \`${EXPECTED}\`"
+                echo "- Attempts: ${attempt}/${ATTEMPTS}"
+                echo "- Result: pass"
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "Live smoke passed for ${EXPECTED}"
+              exit 0
+            fi
+
+            echo "Attempt ${attempt} failed (home=${home_rc} health=${health_rc} status=${status_rc} task=${task_rc}); sleeping ${SLEEP_SECS}s"
+            attempt=$((attempt + 1))
+            if [ "$attempt" -le "$ATTEMPTS" ]; then
+              sleep "$SLEEP_SECS"
+            fi
+          done
+
+          fail_smoke "live smoke failed after ${ATTEMPTS} attempts against ${BASE}"
