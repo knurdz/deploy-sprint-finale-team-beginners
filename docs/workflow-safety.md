@@ -10,10 +10,11 @@ Organizer baseline:
 
 | Workflow | Permissions | Why beyond `contents: read` |
 | --- | --- | --- |
-| **CI** | `contents: read`, `actions: write` | Upload `site-dist-<sha>` and job summaries |
+| **CI** | `contents: read`, `actions: write`, `packages: write` | Upload artifacts; push container image to GHCR on `main` |
 | **PR Preview** | `contents: read`, `pull-requests: write`, `actions: read` | PR comment + artifact download links; no repo write |
 | **Request Organizer Deploy** | `contents: read`, `actions: read` | Read-only; deploy uses `repository_dispatch` curl + secrets (not `GITHUB_TOKEN` write) |
 | **Rollback** | `contents: read`, `actions: read` | Manifest artifact; optional deployer dispatch on manual `dry_run=false` |
+| **Disaster Recovery (T29)** | `contents: read`, `actions: write` | Upload recovery runtime + manifest artifacts; live path uses deployer secrets |
 | **Deploy dashboard (Pages)** | `contents: read`, `pages: write`, `id-token: write`, `actions: read` | GitHub Pages OIDC publish |
 
 No workflow uses `permissions: write-all` or `pull_request_target`.
@@ -26,6 +27,7 @@ No workflow uses `permissions: write-all` or `pull_request_target`.
 | **PR Preview** | `pr-preview-<PR#>` | `true` | Latest commit on PR wins |
 | **Request Organizer Deploy** | `production-<ref>` | `false` | Overlapping deploy **queues**; avoids two VPS writes at once |
 | **Rollback** | `production-<ref>` | `false` | Shares queue with deploy so rollback and deploy do not race |
+| **Disaster Recovery** | `production-<ref>` | `false` | Same production queue as deploy/rollback |
 | **Pages** | `pages-<ref>` | `true` | Independent from VPS `production-*` group |
 
 ## PR workflows and deploy secrets

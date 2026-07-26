@@ -13,14 +13,15 @@ Complete this file on `main` as tasks are completed. Do not paste secrets, priva
 ## Release Evidence
 
 - Current production commit:
-- Current artifact/image identifier: `site-dist-<sha>`
+- Current artifact/image identifier: `site-dist-<sha>` and `ghcr.io/knurdz/deploy-sprint-finale-team-beginners/team-site:<sha>`
 - Current deployment workflow run:
-- Current release manifest path or URL: https://beginners.deploysprint-finals.knurdz.org/status
+- Current release manifest path or URL: `/release-manifest.json` and Actions artifact `release-manifest-<sha>`
 - Notes on live evidence or fallback evidence:
   - HTTPS domain: https://beginners.deploysprint-finals.knurdz.org
   - HTTP domain compatibility and raw IP: http://20.114.32.177
   - `/status` must show `domain.connected=true` and assigned domain fields
   - DNS A record: `beginners` → `20.114.32.177`
+  - T23: `release-manifest.json` maps commit SHA to `site-dist-<sha>` and workflow run ID
 
 ## Score Summary
 
@@ -47,11 +48,11 @@ Use this section for short public notes and links. Full task instructions and ch
 | T11 |  |  |  |
 | T12 | [T12] Fast Dependency Pipeline | CI summary: cache-hit + npm ci + audit | `setup-node` cache keyed on `team-site/package-lock.json`; `npm ci` always runs |
 | T13 |  |  |  |
-| T14 |  |  |  |
+| T14 | [T14] Production Docker Image | `team-site/Dockerfile` multi-stage; CI `docker-image-evidence-<sha>` | tag + image id; nginx serves `dist`; lockfile `npm ci` |
 | T15 | [T15] Runtime Feature Flag | `/status` `featureFlags` + Insights UI | `FEATURE_SHOW_INSIGHTS` secret/var → `VITE_FEATURE_SHOW_INSIGHTS`; no hardcoded flag |
-| T16 |  |  |  |
+| T16 | [T16] Resend Email Alerts | `/status` email + `/email/status.json` | Secret name only: `RESEND_API_KEY`; CI dry-run evidence |
 | T17 |  |  |  |
-| T18 |  |  |  |
+| T18 |  | `/status` `container.image`, CI + deploy logs | `docs/container-deploy.md`; GHCR SHA tag + organizer deployer |
 | T19 |  |  |  |
 | T20 |  |  |  |
 | T21 |  | Workflow YAML + Actions queue evidence | `docs/workflow-safety.md`; `production-*` deploy concurrency |
@@ -64,6 +65,17 @@ Use this section for short public notes and links. Full task instructions and ch
 | T28 |  |  |  |
 | T29 |  |  |  |
 | T30 |  | `/status` monitoring + `sentry-test.html` | `docs/sentry-monitoring.md`; CI Sentry release step |
+| T22 |  |  |  |
+| T23 | [T23] Release Evidence Manifest | `release-manifest.json` artifact + `/status.releaseManifest` | commit, artifact, workflowRun, deployedAt, taskMarkers |
+| T24 |  |  |  |
+| T25 |  |  |  |
+| T26 | [T26] Incident: Broken Deploy Recovery | `deploy-broken.yml` + `docs/incidents/broken-deploy-log.md` | Seeded `build` path → fix `team-site/dist`; rollback first if prod unhealthy |
+| T27 |  |  |  |
+| T28 | [T28] Race-Safe Idempotent Deploy | `scripts/idempotent-deploy.sh` + deploy concurrency/lock; artifact `t28-idempotent-deploy-<sha>` | two-pass dry-run + lock busy proof |
+| T29 |  |  |  |
+| T28 |  |  |  |
+| T29 | [T29] Disaster Recovery From Actions Only | `.github/workflows/recover.yml` + `docs/recovery.md` | Actions-only restore; `dry_run` manifest; no manual VPS |
+| T30 |  |  |  |
 
 ## Public Notes
 
@@ -131,3 +143,47 @@ List anything judges should know without exposing credentials or private infrast
 - Verify off: set secret/var to `false`, rebuild; panel hidden; status `showInsights: false`.
 - Verify on: set to `true`, rebuild; panel visible; status `showInsights: true`.
 - Incident disable: set `FEATURE_SHOW_INSIGHTS=false` and redeploy (no source change).
+
+### T14 production Docker image
+
+- Starter adapted to `team-site/Dockerfile`: `node:20-alpine` build (`npm ci` from `package-lock.json`) + `nginx:alpine` runtime serving `dist`.
+- Nginx config: `team-site/nginx.conf` (serves `/health`, `/status`, SPA fallback).
+- CI builds `ghcr.io/.../team-site:<sha>` and `deploy-sprint/team-site:<sha>`, smoke-tests `/health`, uploads `docker-image-evidence-<sha>` with tag + image id.
+- Verify: CI **Build production Docker image (T14)** green; download evidence artifact; optional local `docker build -t deploy-sprint/team-site:local team-site`.
+
+
+### T23 release evidence manifest
+
+- Starter adapted to `team-site/scripts/write-release-manifest.mjs` (also written during `write-release-evidence.mjs`).
+- CI generates `release-manifest.json` and uploads artifact `release-manifest-<sha>`.
+- Manifest fields: `task`, `commit`, `artifact` (`site-dist-<sha>`), `workflowRun`, `deployedAt`/`deployTime`, `taskMarkers`, `secretsRedacted`.
+- Safe exposure: `/status.releaseManifest` and `/release-manifest.json` in the dist artifact.
+- Verify: download Actions artifact or open `/release-manifest.json` and confirm `commit` matches the scored SHA.
+
+### T16 Resend email alerts
+
+- API key lives only as GitHub Secret `RESEND_API_KEY` (never `VITE_`, never committed).
+- Send/simulate path: `team-site/scripts/prepare-resend-email.mjs` (CI/deploy-time Node only).
+- Default `EMAIL_ALERT_MODE=dry-run` — no network send; optional `send` uses Resend API from env.
+- Evidence: `/status` `email.provider=resend`, `email.configured=true`, `secretRedacted=true` plus `/email/status.json`.
+- Client marker: `team-site/src/config/emailAlerts.ts` (provider/secret name only; no key).
+- Verify: CI summary + `site-dist-<sha>` artifact contains redacted status; search repo/artifacts for no `re_` key values.
+
+
+### T29 disaster recovery from Actions only
+
+- Workflow: `.github/workflows/recover.yml` (`workflow_dispatch` inputs `restore_target`, `dry_run` default `true`).
+- Runbook: `docs/recovery.md`.
+- Recreates (in order): app directories → env placeholders → container/service config → release pointer (artifact + GHCR image) → service recreate → verify.
+- No-live: dry-run uploads `recovery-manifest-<run_id>` + `recovery-runtime/` (`manual_vps_repair: false`).
+- Live: `dry_run=false` requests organizer container redeploy for the confirmed SHA (Actions secrets only; no SSH).
+- Cite log: `Log line proving restore target: restore_target=<sha>`.
+- Judge answer: recreate directories, then env placeholders, then container config, then bind latest confirmed artifact/image, then start/redeploy service via Actions, then verify `/health` + `/status`.
+
+
+- Starter lock adapted in `scripts/idempotent-deploy.sh` (`mkdir` lock dir + `trap` cleanup).
+- Deploy workflow concurrency: `group: production-deploy-beginners`, `cancel-in-progress: false` (queue, don't cancel).
+- Retry-safe ops: create-or-reuse `releases/<sha>`, atomic switch of `current` symlink/dir.
+- Evidence: two dry-run passes in deploy job (pass 2 must log reuse) + lock-busy proof; artifact `t28-idempotent-deploy-<sha>`.
+- Verify: open deploy Actions run logs / download artifact; confirm second pass reuses the same target.
+
