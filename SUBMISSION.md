@@ -62,7 +62,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T25 |  |  |  |
 | T26 | [T26] Incident: Broken Deploy Recovery | `deploy-broken.yml` + `docs/incidents/broken-deploy-log.md` | Seeded `build` path → fix `team-site/dist`; rollback first if prod unhealthy |
 | T27 |  |  |  |
-| T28 |  |  |  |
+| T28 | [T28] Race-Safe Idempotent Deploy | `scripts/idempotent-deploy.sh` + deploy concurrency/lock; artifact `t28-idempotent-deploy-<sha>` | two-pass dry-run + lock busy proof |
 | T29 | [T29] Disaster Recovery From Actions Only | `.github/workflows/recover.yml` + `docs/recovery.md` | Actions-only restore; `dry_run` manifest; no manual VPS |
 | T30 |  |  |  |
 
@@ -136,10 +136,18 @@ List anything judges should know without exposing credentials or private infrast
 ### T24 Cloudflare Turnstile
 
 - Snippet adapted in `team-site/src/config/turnstile.ts` + server path `team-site/scripts/prepare-turnstile.mjs`.
-- Public widget key: `TURNSTILE_SITE_KEY` / `VITE_TURNSTILE_SITE_KEY` (Variable OK). Secret: GitHub Secret `TURNSTILE_SECRET_KEY` only — never `VITE_TURNSTILE_SECRET_KEY`.
+- Public widget key: `TURNSTILE_SITE_KEY` / `VITE_TURNSTILE_SITE_KEY` (Variable OK). Secret: GitHub Secret `TURNSTILE_SECRET_KEY` only — never a Vite-prefixed secret env.
 - Widget rendered on `/contact.html` (`TurnstileWidget`); submit requires `cf-turnstile-response` token.
 - CI dry-run verifies secret presence and writes `/turnstile/status.json` + `/status.turnstile` with `provider=cloudflare-turnstile`, `secretRedacted=true`, `allowedHostname`.
-- Verify: CI assert step + artifact; `grep -R VITE_TURNSTILE_SECRET` must be empty.
+- Verify: CI assert step + artifact; no Vite-prefixed Turnstile secret env in source/dist.
+
+### T28 race-safe idempotent deploy
+
+- Starter lock adapted in `scripts/idempotent-deploy.sh` (`mkdir` lock dir + `trap` cleanup).
+- Deploy workflow concurrency: `group: production-deploy-beginners`, `cancel-in-progress: false` (queue, don't cancel).
+- Retry-safe ops: create-or-reuse `releases/<sha>`, atomic switch of `current` symlink/dir.
+- Evidence: two dry-run passes in deploy job (pass 2 must log reuse) + lock-busy proof; artifact `t28-idempotent-deploy-<sha>`.
+- Verify: open deploy Actions run logs / download artifact; confirm second pass reuses the same target.
 
 ### T29 disaster recovery from Actions only
 
@@ -150,4 +158,3 @@ List anything judges should know without exposing credentials or private infrast
 - Live: `dry_run=false` requests organizer container redeploy for the confirmed SHA (Actions secrets only; no SSH).
 - Starter bug: empty `restoreTarget` camelCase input; fixed to `restore_target`. Cite log: `Log line proving restore target: restore_target=<sha>`.
 - Judge answer: recreate directories, then env placeholders, then container config, then bind latest confirmed artifact/image, then start/redeploy service via Actions, then verify `/health` + `/status`.
-

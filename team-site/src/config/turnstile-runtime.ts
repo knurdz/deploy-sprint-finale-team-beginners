@@ -1,6 +1,6 @@
 /**
  * Build-time Turnstile runtime (placeholder in git; CI overwrites from TURNSTILE_SITE_KEY).
- * Public site key only. Do not commit real secrets. Never use VITE_TURNSTILE_SECRET_KEY.
+ * Public site key only. Do not commit real secrets. Never expose the secret via Vite client env.
  */
 export const turnstileSiteKey = '';
 export const turnstileSiteKeyConfigured = false;

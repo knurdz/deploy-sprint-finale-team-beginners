@@ -282,8 +282,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           test -f team-site/dist/turnstile/status.json
           test -f team-site/dist/status
-          if grep -R "VITE_TURNSTILE_SECRET" team-site/dist team-site/src team-site/scripts .github/workflows/ci.yml 2>/dev/null; then
-            echo "Found forbidden VITE_TURNSTILE_SECRET reference."
+          # Fail only on real usage in app/build output — not docs saying "don't use Vite for the secret".
+          if grep -RInE 'VITE_TURNSTILE_SECRET_KEY[[:space:]]*[:=]|process\.env\.VITE_TURNSTILE_SECRET|import\.meta\.env\.VITE_TURNSTILE_SECRET' \
+            team-site/dist team-site/src team-site/scripts 2>/dev/null; then
+            echo "Found forbidden Vite-prefixed Turnstile secret usage."
             exit 1
           fi
           python3 - <<'PY'
@@ -439,7 +441,7 @@ jobs:
             echo "- Fields: commit, artifact, workflowRun, deployedAt, taskMarkers"
             echo ""
             echo "## T24 Cloudflare Turnstile"
-            echo "- Secret name: \`TURNSTILE_SECRET_KEY\` (never \`VITE_TURNSTILE_SECRET_KEY\`)"
+            echo "- Secret name: \`TURNSTILE_SECRET_KEY\` (server/CI only; never Vite client env)"
             echo "- Public site key: \`TURNSTILE_SITE_KEY\` / \`VITE_TURNSTILE_SITE_KEY\`"
             echo "- Evidence: \`/status.turnstile\` + \`/turnstile/status.json\` (provider=cloudflare-turnstile, secretRedacted=true)"
             echo "- Contact widget: \`TurnstileWidget\` on \`/contact.html\`"

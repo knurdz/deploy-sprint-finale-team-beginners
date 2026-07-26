@@ -2,6 +2,7 @@ name: Request Organizer Deploy
 
 # T06: deployment runs only after the CI workflow succeeds on main (workflow_run).
 # T21: production concurrency queue; minimal permissions (no repository write).
+# T28: lock + idempotent directory replace; overlapping runs queue (cancel-in-progress: false).
 
 on:
   workflow_run:
@@ -26,7 +27,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: production-${{ github.ref }}
+  # T28: one production deploy at a time; do not cancel — queue overlapping runs.
+  group: production-deploy-beginners
   cancel-in-progress: false
 
 jobs:
@@ -42,6 +44,9 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Confirm CI gate passed
         if: github.event_name == 'workflow_run'
         run: |
@@ -95,10 +100,69 @@ jobs:
             echo "sha=$sha"
             echo "branch=$branch"
             echo "source_run_id=$source_run_id"
+            echo "smoke_mode=$smoke_mode"
+            echo "skip_deploy=$skip_deploy"
             echo "container_image=$image"
           } >> "$GITHUB_OUTPUT"
 
           echo "Resolved deploy sha=$sha smoke_mode=$smoke_mode skip_deploy=$skip_deploy"
+
+      - name: T28 race-safe idempotent deploy dry-run (two passes)
+        id: t28
+        env:
+          DEPLOY_SHA: ${{ steps.request.outputs.sha }}
+          LOCK_DIR: /tmp/deploy-sprint-beginners.lock
+          DEPLOY_ROOT: /tmp/deploy-sprint-beginners
+          LOG_FILE: ${{ github.workspace }}/t28-idempotent-deploy.log
+        run: |
+          set -euo pipefail
+          chmod +x scripts/idempotent-deploy.sh
+          : > "$LOG_FILE"
+
+          echo "== T28 pass 1 (create/replace target) =="
+          DEPLOY_PASS=1 ./scripts/idempotent-deploy.sh
+
+          echo "== T28 pass 2 (rerun against same target — must reuse) =="
+          DEPLOY_PASS=2 ./scripts/idempotent-deploy.sh
+
+          if ! grep -q "reuse existing release directory" "$LOG_FILE"; then
+            echo "Expected second pass to reuse the release directory"
+            cat "$LOG_FILE"
+            exit 1
+          fi
+
+          # Prove lock blocks overlapping work while held
+          mkdir /tmp/deploy-sprint-beginners.lock
+          if ./scripts/idempotent-deploy.sh; then
+            echo "Lock should have blocked a concurrent deploy"
+            exit 1
+          else
+            echo "T28 lock correctly blocked overlapping deploy attempt"
+            echo "[T28] lock correctly blocked overlapping deploy attempt" >> "$LOG_FILE"
+          fi
+          rmdir /tmp/deploy-sprint-beginners.lock
+
+          {
+            echo "task=T28"
+            echo "commit=${DEPLOY_SHA}"
+            echo "concurrency_group=production-deploy-beginners"
+            echo "cancel_in_progress=false"
+            echo "lock_dir=${LOCK_DIR}"
+            echo "idempotent_passes=2"
+            echo "secrets_redacted=true"
+          } > t28-idempotent-evidence.txt
+
+          cat "$LOG_FILE"
+          cat t28-idempotent-evidence.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload T28 idempotent deploy evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: t28-idempotent-deploy-${{ steps.request.outputs.sha }}
+          path: |
+            t28-idempotent-deploy.log
+            t28-idempotent-evidence.txt
+          if-no-files-found: error
 
       - name: Authorize deploy with private token (server-side only)
         if: steps.request.outputs.skip_deploy != 'true'
@@ -113,6 +177,7 @@ jobs:
           echo "Deploy authorized using masked PRIVATE_DEPLOY_TOKEN."
 
       - name: Request container deploy from organizer deployer
+        if: steps.request.outputs.skip_deploy != 'true'
         env:
           DEPLOYER_DISPATCH_TOKEN: ${{ secrets.DEPLOYER_DISPATCH_TOKEN }}
           DEPLOYER_REPO: knurdz/deploy-sprint-deployer
@@ -149,13 +214,15 @@ jobs:
                   "app_port": os.environ.get("APP_PORT", "8080"),
                   "image": os.environ["CONTAINER_IMAGE"],
                   "public_url": os.environ.get("PUBLIC_URL", ""),
+                  "idempotent": True,
+                  "task_markers": ["T28"],
               },
           }
 
           print(json.dumps(payload))
           PY
 
-          echo "T18 container deploy request: image=${CONTAINER_IMAGE} name=${CONTAINER_NAME} port=${APP_PORT}"
+          echo "T18/T28 container deploy request: image=${CONTAINER_IMAGE} name=${CONTAINER_NAME} port=${APP_PORT} (idempotent)"
 
           curl --fail-with-body --show-error --silent \
             -X POST \
@@ -167,12 +234,18 @@ jobs:
 
           echo "Requested organizer deployment for ${TEAM_REPO}@${TEAM_SHA}."
 
-      - name: T21 deploy concurrency summary
+      - name: T28 / T21 deploy concurrency summary
         run: |
           {
-            echo "## T21 production concurrency"
+            echo "## T28 race-safe idempotent deploy"
             echo ""
-            echo "- concurrency group: \`production-${{ github.ref }}\`"
-            echo "- cancel-in-progress: \`false\` (overlapping deploy requests queue; VPS stays consistent)"
+            echo "- concurrency group: \`production-deploy-beginners\`"
+            echo "- cancel-in-progress: \`false\` (overlapping deploys queue; never cancel mid-flight)"
+            echo "- lock: \`/tmp/deploy-sprint-beginners.lock\` via \`mkdir\` (starter pattern)"
+            echo "- directory ops: create-or-reuse release dir + atomic \`current\` switch"
+            echo "- evidence artifact: \`t28-idempotent-deploy-${{ steps.request.outputs.sha }}\`"
+            echo "- two dry-run passes logged (second pass reuses same target)"
+            echo ""
+            echo "## T21 permissions"
             echo "- permissions: \`contents: read\`, \`actions: read\` only"
           } >> "$GITHUB_STEP_SUMMARY"
