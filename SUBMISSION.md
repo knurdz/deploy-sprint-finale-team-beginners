@@ -62,6 +62,8 @@ Use this section for short public notes and links. Full task instructions and ch
 | T25 |  |  |  |
 | T26 | [T26] Incident: Broken Deploy Recovery | `deploy-broken.yml` + `docs/incidents/broken-deploy-log.md` | Seeded `build` path → fix `team-site/dist`; rollback first if prod unhealthy |
 | T27 |  |  |  |
+| T28 | [T28] Race-Safe Idempotent Deploy | `scripts/idempotent-deploy.sh` + deploy concurrency/lock; artifact `t28-idempotent-deploy-<sha>` | two-pass dry-run + lock busy proof |
+| T29 |  |  |  |
 | T28 |  |  |  |
 | T29 | [T29] Disaster Recovery From Actions Only | `.github/workflows/recover.yml` + `docs/recovery.md` | Actions-only restore; `dry_run` manifest; no manual VPS |
 | T30 |  |  |  |
@@ -133,6 +135,7 @@ List anything judges should know without exposing credentials or private infrast
 - Client marker: `team-site/src/config/emailAlerts.ts` (provider/secret name only; no key).
 - Verify: CI summary + `site-dist-<sha>` artifact contains redacted status; search repo/artifacts for no `re_` key values.
 
+
 ### T29 disaster recovery from Actions only
 
 - Workflow: `.github/workflows/recover.yml` (`workflow_dispatch` inputs `restore_target`, `dry_run` default `true`).
@@ -143,4 +146,10 @@ List anything judges should know without exposing credentials or private infrast
 - Cite log: `Log line proving restore target: restore_target=<sha>`.
 - Judge answer: recreate directories, then env placeholders, then container config, then bind latest confirmed artifact/image, then start/redeploy service via Actions, then verify `/health` + `/status`.
 
+
+- Starter lock adapted in `scripts/idempotent-deploy.sh` (`mkdir` lock dir + `trap` cleanup).
+- Deploy workflow concurrency: `group: production-deploy-beginners`, `cancel-in-progress: false` (queue, don't cancel).
+- Retry-safe ops: create-or-reuse `releases/<sha>`, atomic switch of `current` symlink/dir.
+- Evidence: two dry-run passes in deploy job (pass 2 must log reuse) + lock-busy proof; artifact `t28-idempotent-deploy-<sha>`.
+- Verify: open deploy Actions run logs / download artifact; confirm second pass reuses the same target.
 
