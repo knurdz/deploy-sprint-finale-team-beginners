@@ -32,7 +32,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | --- | --- | --- | --- |
 | T01 |  |  |  |
 | T02 |  |  |  |
-| T03 |  |  |  |
+| T03 | [T03] Build Once Deploy Same Artifact | CI `site-dist-<sha>` + dry-run download; `/status.artifact` + `workflowRun`; `release-manifest-<sha>` | Deploy path does not run `npm run build` |
 | T04 |  |  |  |
 | T05 | [T05] Secret And Config Separation | `/status` config block, `.env.example`, CI masked secret | `PUBLIC_DEPLOY_LABEL` variable; `PRIVATE_DEPLOY_TOKEN` secret (names only in PR) |
 | T06 |  |  |  |
@@ -62,5 +62,7 @@ Use this section for short public notes and links. Full task instructions and ch
 | T30 |  |  |  |
 
 ## Public Notes
+
+- T03: CI builds once and uploads immutable artifact `site-dist-${github.sha}`. The `dry-run-deploy` job downloads that exact artifact (no `npm run build`). `/status` exposes `artifact` and `workflowRun`. Organizer deploy request also downloads the same SHA-named artifact before dispatch.
 
 List anything judges should know without exposing credentials or private infrastructure details.

@@ -1,7 +1,11 @@
 {
   "team": "BEGINNERS",
-  "task": "T05",
-  "marker": "T05",
+  "commit": "pending-ci-build",
+  "commit_short": "pending",
+  "task": "T03",
+  "marker": "T03",
+  "artifact": "site-dist-pending-ci-build",
+  "workflowRun": "pending",
   "config": {
     "publicDeployLabel": "BEGINNERS-DEPLOY-LABEL",
     "privateDeployTokenConfigured": true,

@@ -9,9 +9,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.meta.outputs.artifact_name }}
+      commit_sha: ${{ steps.meta.outputs.commit_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Record immutable artifact identity
+        id: meta
+        run: |
+          set -euo pipefail
+          echo "commit_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=site-dist-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -39,18 +49,107 @@ jobs:
         run: npm ci
         working-directory: team-site
 
-      - name: Build
+      - name: Build once
         env:
           TEAM_NAME: ${{ vars.TEAM_NAME || 'BEGINNERS' }}
           PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           VITE_PUBLIC_DEPLOY_LABEL: ${{ vars.PUBLIC_DEPLOY_LABEL }}
           PRIVATE_DEPLOY_TOKEN_CONFIGURED: ${{ steps.deploy_secret.outputs.configured }}
           VITE_PUBLIC_URL: ${{ vars.PUBLIC_URL || vars.DOMAIN_PUBLIC_URL || secrets.PUBLIC_URL || vars.IP_PUBLIC_URL }}
+          BUILD_ARTIFACT_NAME: site-dist-${{ github.sha }}
+          TASK_MARKER: T03
         run: npm run build
         working-directory: team-site
 
-      - name: Upload dist artifact
+      - name: Upload immutable dist artifact
         uses: actions/upload-artifact@v4
         with:
           name: site-dist-${{ github.sha }}
           path: team-site/dist
+          if-no-files-found: error
+
+  dry-run-deploy:
+    name: Dry-run deploy (consume CI artifact)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download exact CI artifact (no rebuild)
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: deploy-dist
+
+      - name: Verify artifact identity and write release manifest
+        env:
+          ARTIFACT_NAME: ${{ needs.build.outputs.artifact_name }}
+          COMMIT_SHA: ${{ needs.build.outputs.commit_sha }}
+          WORKFLOW_RUN: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f deploy-dist/index.html ]; then
+            echo "Downloaded artifact is missing index.html"
+            exit 1
+          fi
+          if [ ! -f deploy-dist/status ]; then
+            echo "Downloaded artifact is missing /status"
+            exit 1
+          fi
+          if [ ! -f deploy-dist/health ]; then
+            echo "Downloaded artifact is missing /health"
+            exit 1
+          fi
+
+          # Guard: this job must never rebuild from source.
+          if [ -f package.json ] || [ -d team-site ]; then
+            echo "Unexpected source tree present in dry-run deploy job"
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          artifact = os.environ["ARTIFACT_NAME"]
+          commit = os.environ["COMMIT_SHA"]
+          workflow_run = os.environ["WORKFLOW_RUN"]
+
+          status = json.loads(Path("deploy-dist/status").read_text(encoding="utf-8"))
+          status_artifact = status.get("artifact")
+          status_run = str(status.get("workflowRun"))
+
+          if status_artifact != artifact:
+              raise SystemExit(f"status.artifact mismatch: {status_artifact!r} != {artifact!r}")
+          if status.get("commit") != commit:
+              raise SystemExit(f"status.commit mismatch: {status.get('commit')!r} != {commit!r}")
+          if status_run != workflow_run:
+              raise SystemExit(f"status.workflowRun mismatch: {status_run!r} != {workflow_run!r}")
+
+          manifest = {
+              "commit": commit,
+              "artifact": artifact,
+              "workflowRun": workflow_run,
+              "deployMode": "dry-run-download-only",
+              "rebuiltDuringDeploy": False,
+          }
+          Path("release-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps(manifest, indent=2))
+          PY
+
+          {
+            echo "## T03 build-once deploy evidence"
+            echo ""
+            echo "- artifact: \`$ARTIFACT_NAME\`"
+            echo "- workflowRun: \`$WORKFLOW_RUN\`"
+            echo "- commit: \`$COMMIT_SHA\`"
+            echo "- rebuiltDuringDeploy: false"
+            echo "- deployMode: dry-run-download-only"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ needs.build.outputs.commit_sha }}
+          path: release-manifest.json
+          if-no-files-found: error
